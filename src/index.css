@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  font-family: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Custom gorgeous styling utilities for Educational Soft UI & Soft shadows */
+.glass-card {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(186, 230, 253, 0.4);
+}
+
+.soft-shadow {
+  box-shadow: 0 10px 30px -5px rgba(125, 211, 252, 0.2), 0 4px 12px -2px rgba(125, 211, 252, 0.1);
+}
+
+.edu-gradient {
+  background: linear-gradient(135deg, #f0f9ff 0%, #ecfdf5 50%, #fffbeb 100%);
+}

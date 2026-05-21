@@ -1,0 +1,164 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Security helper definitions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // We allow the teacher role email or the user administrator email
+    function isTeacher() {
+      return isSignedIn() && (
+        request.auth.token.email == 'teacher@edu.ma' || 
+        request.auth.token.email == 'asserrarmed@gmail.com'
+      );
+    }
+
+    function isLevel5Student() {
+      return isSignedIn() && request.auth.token.email == 'student5@edu.ma';
+    }
+
+    function isLevel6Student() {
+      return isSignedIn() && request.auth.token.email == 'student6@edu.ma';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation for Exercise
+    function isValidExercise(data) {
+      return data.text is string && data.text.size() <= 10000
+        && data.level is string && (data.level == '5' || data.level == '6')
+        && data.category is string && (data.category == 'تمرين' || data.category == 'فرض' || data.category == 'مراقبة مستمرة')
+        && data.authorId == request.auth.uid;
+    }
+
+    // Validation for Score
+    function isValidScore(data) {
+      return data.studentName is string && data.studentName.size() <= 100
+        && data.level is string && (data.level == '5' || data.level == '6')
+        && data.subject is string && data.subject.size() <= 100
+        && data.scoreValue is string && data.scoreValue.size() <= 10
+        && data.scoreType is string && (data.scoreType == 'نقطة المراقبة المستمرة' || data.scoreType == 'الفرض');
+    }
+
+    // Validation for Absence
+    function isValidAbsence(data) {
+      return data.studentName is string && data.studentName.size() <= 100
+        && data.level is string && (data.level == '5' || data.level == '6')
+        && data.date is string && data.date.size() <= 15
+        && data.absenceType is string && (data.absenceType == 'غياب مبرر' || data.absenceType == 'غياب غير مبرر');
+    }
+
+    // Validation for Document
+    function isValidDocument(data) {
+      return data.name is string && data.name.size() <= 200
+        && data.level is string && (data.level == '5' || data.level == '6')
+        && data.fileType is string && data.fileType.size() <= 100
+        && data.fileUrl is string && data.fileUrl.size() <= 4096
+        && data.createdAt is string
+        && data.authorId == request.auth.uid;
+    }
+
+    // --- Exercises match block ---
+    match /exercises/{exerciseId} {
+      allow get: if isSignedIn() && (
+        isTeacher() ||
+        (isLevel5Student() && resource.data.level == '5') ||
+        (isLevel6Student() && resource.data.level == '6')
+      );
+      
+      allow list: if isSignedIn() && (
+        isTeacher() ||
+        (isLevel5Student() && resource.data.level == '5') ||
+        (isLevel6Student() && resource.data.level == '6')
+      );
+
+      allow create: if isTeacher() && isValidId(exerciseId) && isValidExercise(incoming());
+      
+      allow update: if isTeacher() && isValidId(exerciseId) && isValidExercise(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['text', 'level', 'category'])
+      );
+      
+      allow delete: if isTeacher();
+    }
+
+    // --- Scores match block ---
+    match /scores/{scoreId} {
+      allow get: if isSignedIn() && (
+        isTeacher() ||
+        (isLevel5Student() && resource.data.level == '5') ||
+        (isLevel6Student() && resource.data.level == '6')
+      );
+      
+      allow list: if isSignedIn() && (
+        isTeacher() ||
+        (isLevel5Student() && resource.data.level == '5') ||
+        (isLevel6Student() && resource.data.level == '6')
+      );
+
+      allow create: if isTeacher() && isValidId(scoreId) && isValidScore(incoming());
+      
+      allow update: if isTeacher() && isValidId(scoreId) && isValidScore(incoming());
+      
+      allow delete: if isTeacher();
+    }
+
+    // --- Absences match block ---
+    match /absences/{absenceId} {
+      allow get: if isSignedIn() && (
+        isTeacher() ||
+        (isLevel5Student() && resource.data.level == '5') ||
+        (isLevel6Student() && resource.data.level == '6')
+      );
+      
+      allow list: if isSignedIn() && (
+        isTeacher() ||
+        (isLevel5Student() && resource.data.level == '5') ||
+        (isLevel6Student() && resource.data.level == '6')
+      );
+
+      allow create: if isTeacher() && isValidId(absenceId) && isValidAbsence(incoming());
+      
+      allow update: if isTeacher() && isValidId(absenceId) && isValidAbsence(incoming());
+      
+      allow delete: if isTeacher();
+    }
+
+    // --- Documents match block ---
+    match /documents/{documentId} {
+      allow get: if isSignedIn() && (
+        isTeacher() ||
+        (isLevel5Student() && resource.data.level == '5') ||
+        (isLevel6Student() && resource.data.level == '6')
+      );
+      
+      allow list: if isSignedIn() && (
+        isTeacher() ||
+        (isLevel5Student() && resource.data.level == '5') ||
+        (isLevel6Student() && resource.data.level == '6')
+      );
+
+      allow create: if isTeacher() && isValidId(documentId) && isValidDocument(incoming());
+      
+      allow update: if isTeacher() && isValidId(documentId) && isValidDocument(incoming());
+      
+      allow delete: if isTeacher();
+    }
+  }
+}
