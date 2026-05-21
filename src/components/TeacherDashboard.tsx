@@ -1552,7 +1552,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         />
                         <span>المستوى الخامس</span>
                       </label>
-                      <labelclassName="flex items-center text-xs font-bold text-slate-705 cursor-pointer select-none gap-1.5">
+                      <label className="flex items-center text-xs font-bold text-slate-705 cursor-pointer select-none gap-1.5">
                         <input
                           type="radio"
                           name="absenceLevel"
