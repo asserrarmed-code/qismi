@@ -12,9 +12,15 @@ import {
   Award, 
   Calendar, 
   BookOpen, 
+  Clock, 
   LogOut, 
+  CheckCircle, 
+  Info, 
+  Sparkles, 
+  Compass, 
   Smile, 
   Bookmark, 
+  CheckCircle2,
   CalendarDays,
   FolderOpen,
   FileText,
@@ -161,7 +167,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         initial={{ opacity: 0, y: -15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: 'easeOut' }}
-        className="bg-gradient-to-r from-sky-450 via-blue-500 to-indigo-500 text-white p-6 sm:p-8 rounded-[30px] border border-sky-300 shadow-lg relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
+        className="bg-gradient-to-r from-sky-400 via-blue-500 to-indigo-500 text-white p-6 sm:p-8 rounded-[30px] border border-sky-300 shadow-lg relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
       >
         <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full blur-xl pointer-events-none" />
         <div className="absolute left-10 bottom-0 w-24 h-24 bg-sky-300/20 rounded-full blur-lg pointer-events-none" />
@@ -200,7 +206,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         </button>
       </motion.div>
 
-      {/* Teacher's Note Section - Highlighted & Elegant Display */}
+      {/* Teacher's Note Section */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
@@ -229,7 +235,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         </div>
       </motion.div>
 
-      {/* Level Segregation Information Ribbon */}
+      {/* Level Segregation Ribbon */}
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -237,277 +243,425 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         className="bg-teal-50/70 border-2 border-teal-100/90 text-teal-900 rounded-[22px] p-5 mt-6 text-xs sm:text-sm font-bold leading-relaxed flex items-start gap-3.5 shadow-sm shadow-emerald-50"
       >
         <div className="bg-teal-100 p-2 rounded-xl text-teal-600 shrink-0">
-          <CheckCircle2 className="h-5 w-5" />
+          <Compass className="h-5 w-5 animate-spin" style={{ animationDuration: '6s' }} />
         </div>
         <div className="space-y-1">
-          <h4 className="text-xs sm:text-sm font-extrabold text-teal-950">بيان رسمي للأمان والموثوقية:</h4>
+          <h4 className="text-xs sm:text-sm font-extrabold text-teal-950 flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            بيان رسمي للأمان والموثوقية:
+          </h4>
           <p className="text-teal-850 text-xs font-semibold leading-relaxed">
             لقد جرى تصفية البيانات الرسمية لمستوى تدرجك التعليمي بدقة. كافة المهام والتمارين المسحوبة من قاعدة البيانات السحابية تقتصر كلياً على فئة التلميذ المستهدفة للمستوى <span className="underline decoration-teal-400 decoration-2">{currentLevel === '5' ? 'الخامس' : 'السادس'} ابتدائي</span> لضمان تجربة تعليمية سلسة وخالية من المشتتات.
           </p>
         </div>
       </motion.div>
 
-      {/* Main Educational Panels */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8 pb-12">
         
-        {/* Left Panel: Exercises & Active AI Questions */}
+        {/* Left Column: Interactive Assigned Works / Exercises */}
         <div className="lg:col-span-8 space-y-6">
-          <div className="bg-white border border-sky-100 rounded-[28px] p-6 shadow-md shadow-sky-100/5">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-sky-50 mb-6 gap-4">
-              <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-sky-500" />
-                <span>التمارين والأنشطة التقويمية المستهدفة لك</span>
-              </h2>
+          <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
+            <div className="absolute right-4 top-4 text-sky-400 opacity-20 hover:opacity-100 transition-opacity">
+              <BookOpen className="h-10 w-10" />
+            </div>
 
-              {/* Sub categories filter */}
-              <div className="flex p-1 bg-slate-100 border border-slate-200/50 rounded-xl w-full sm:w-auto self-stretch">
-                {(['all', 'تمرين', 'فرض', 'مراقبة مستمرة'] as const).map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategoryFilter(cat)}
-                    className={`flex-1 sm:flex-initial text-center px-3 py-1.5 rounded-lg text-[10px] font-black transition ${
-                      selectedCategoryFilter === cat 
-                        ? 'bg-white text-slate-900 shadow-sm border border-slate-200' 
-                        : 'text-slate-500 hover:text-slate-800'
-                    }`}
-                  >
-                    {cat === 'all' ? 'الجميع' : cat}
-                  </button>
-                ))}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-sky-100 mb-6 relative z-10">
+              <div className="space-y-1">
+                <h2 className="text-base sm:text-lg font-black text-slate-850 flex items-center gap-2">
+                  <span className="p-1.5 bg-amber-100 text-amber-600 rounded-xl">
+                    <BookOpen className="h-4 w-4" />
+                  </span>
+                  <span>الأنشطة المدرسية والواجبات المقررة</span>
+                </h2>
+                <p className="text-xs text-slate-500 font-bold leading-relaxed">المهام الفردية والتمارين المنزلية التي نشرها مدرسك المعتمر</p>
+              </div>
+              
+              <div className="flex bg-slate-100 border border-slate-200/60 p-1 rounded-2xl text-xs w-full sm:w-auto overflow-x-auto gap-0.5 shrink-0 select-none">
+                <button
+                  onClick={() => setSelectedCategoryFilter('all')}
+                  className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl font-extrabold transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                    selectedCategoryFilter === 'all' 
+                      ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-sm' 
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                  }`}
+                >
+                  الكل ({exercises.length})
+                </button>
+                <button
+                  onClick={() => setSelectedCategoryFilter('تمرين')}
+                  className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl font-extrabold transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                    selectedCategoryFilter === 'تمرين' 
+                      ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-sm' 
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                  }`}
+                >
+                  تمارين
+                </button>
+                <button
+                  onClick={() => setSelectedCategoryFilter('مراقبة مستمرة')}
+                  className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl font-extrabold transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                    selectedCategoryFilter === 'مراقبة مستمرة' 
+                      ? 'bg-gradient-to-r from-indigo-400 to-indigo-500 text-white shadow-sm' 
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                  }`}
+                >
+                  مراقبة
+                </button>
+                <button
+                  onClick={() => setSelectedCategoryFilter('فرض')}
+                  className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl font-extrabold transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                    selectedCategoryFilter === 'فرض' 
+                      ? 'bg-gradient-to-r from-rose-400 to-red-500 text-white shadow-sm' 
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                  }`}
+                >
+                  فروض
+                </button>
               </div>
             </div>
 
             {isLoading ? (
-              <p className="text-xs text-sky-500 text-center py-12 font-bold animate-pulse">جاري جلب الواجبات المنزلية والتمارين من الخادم السحابي...</p>
+              <div className="text-center py-16 space-y-3">
+                <div className="w-10 h-10 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-sky-600 font-extrabold">جاري مزامنة وسحب الأنشطة من قاعدة البيانات السحابية...</p>
+              </div>
             ) : filteredExercises.length === 0 ? (
-              <div className="text-center py-16 bg-slate-50 border border-slate-100 rounded-2xl select-none">
-                <p className="text-xs text-slate-400 font-bold">لا توجد تمارين مستهدفة نشطة في هذا الفلتر حالياً.</p>
+              <div className="text-center py-14 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[24px] p-8 space-y-3">
+                <div className="bg-slate-105 p-3 rounded-full w-14 h-14 mx-auto flex items-center justify-center text-slate-400">
+                  <Smile className="h-8 w-8 text-sky-400" />
+                </div>
+                <h3 className="text-sm font-black text-slate-800">لا توجد أي واجبات أو أنشطة مقررة</h3>
+                <p className="text-xs text-slate-500 font-bold leading-relaxed max-w-sm mx-auto">
+                  عمل رائع يا بطل! يبدو أنك مطلع ومستوعب لكامل الدروس الرسمية للقسم التعليمي. واصل مسارك المتميز!
+                </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {filteredExercises.map((ex) => {
-                  const aiParsed = parseAiQuestion(ex.description);
-                  const isAnswered = !!answeredQuiz[ex.id];
-                  const answerDetails = answeredQuiz[ex.id];
-
-                  return (
-                    <motion.div 
-                      key={ex.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`border rounded-2xl p-5 bg-gradient-to-br from-white to-sky-50/10 flex flex-col justify-between transition gap-4 ${
-                        aiParsed.isAi ? 'border-indigo-150/80 shadow-sm shadow-indigo-50' : 'border-sky-50 hover:border-sky-200'
-                      }`}
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between border-b border-slate-100/60 pb-2">
-                          <span className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold ${
-                            ex.category === 'فرض' ? 'bg-amber-50 text-amber-800' : 'bg-sky-50 text-sky-800'
-                          }`}>
-                            {ex.category}
-                          </span>
-                          <span className="text-[10px] font-sans text-slate-400 font-bold">
-                            تاريخ النشر: {new Date(ex.createdAt).toLocaleDateString('ar-MA')}
-                          </span>
-                        </div>
-
-                        <div className="space-y-1">
-                          <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                            {aiParsed.isAi && <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-black">سؤال تفاعلي ذكي 🤖</span>}
-                            <span>{ex.title}</span>
-                          </h3>
-                        </div>
-
-                        {/* Interactive AI Quiz UI */}
-                        {aiParsed.isAi && aiParsed.options ? (
-                          <div className="bg-indigo-50/20 border border-indigo-100 rounded-2xl p-4 space-y-4 mt-2">
-                            <div className="space-y-1.5">
-                              <span className="text-[10px] text-indigo-700 font-black block">السؤال المقترح:</span>
-                              <p className="text-xs sm:text-sm text-slate-800 font-extrabold leading-relaxed">{aiParsed.question}</p>
+              <div className="space-y-5">
+                {filteredExercises.map((ex) => (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={ex.id} 
+                    className="border border-sky-100 hover:border-sky-300 bg-gradient-to-br from-white to-sky-50/20 p-5 rounded-2xl relative shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
+                  >
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold ${
+                          ex.category === 'فرض' 
+                            ? 'bg-rose-50 text-rose-800 border-2 border-rose-100' 
+                            : ex.category === 'مراقبة مستمرة' 
+                              ? 'bg-amber-50 text-amber-800 border-2 border-amber-150' 
+                              : 'bg-emerald-50 text-emerald-800 border-2 border-emerald-150'
+                        }`}>
+                          {ex.category === 'فرض' ? '📝 فرض صفي' : ex.category === 'مراقبة مستمرة' ? '⭐ مراقبة دورية' : '✏️ تمرين منزلي'}
+                        </span>
+                        <span className="px-2 py-1 bg-sky-100 text-sky-700 rounded-lg text-[9px] font-bold">
+                          المستوى {ex.level}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1 font-sans">
+                        <CalendarDays className="h-3.5 w-3.5 text-sky-450" />
+                        <span>{new Date(ex.createdAt).toLocaleDateString('ar-MA')}</span>
+                      </div>
+                    </div>
+                    
+                    {(() => {
+                      const quiz = parseAiQuestion(ex.text);
+                      if (quiz.isAi) {
+                        const answerState = answeredQuiz[ex.id];
+                        return (
+                          <div className="space-y-4">
+                            <div className="bg-gradient-to-r from-indigo-50 to-sky-50 p-4 rounded-xl border border-indigo-150 text-indigo-950 font-black text-xs flex justify-between items-center flex-wrap gap-2">
+                              <span className="flex items-center gap-1.5">
+                                <Sparkles className="h-4 w-4 text-indigo-500 animate-bounce" />
+                                <span>سؤال تفاعلي ذكي مدعوم بالذكاء الاصطناعي ✨</span>
+                              </span>
+                              {quiz.component && (
+                                <span className="bg-indigo-100/50 text-indigo-850 px-2 py-1 rounded-lg text-[10px] font-black border border-indigo-200">
+                                  {quiz.component} / {quiz.lesson}
+                                </span>
+                              )}
                             </div>
 
-                            <div className="space-y-2 pt-2 border-t border-indigo-100/50">
-                              <span className="text-[10px] text-indigo-600 font-black block">حدد الإجابة الصحيحة لتتحقق من مهاراتك:</span>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                {aiParsed.options.map((opt, idx) => {
-                                  let btnClass = "bg-white hover:bg-slate-50 text-slate-800 border-slate-200";
-                                  if (isAnswered) {
-                                    if (opt === aiParsed.correctAnswer) {
-                                      btnClass = "bg-emerald-500 text-white border-emerald-500";
-                                    } else if (answerDetails.selected === opt) {
-                                      btnClass = "bg-red-500 text-white border-red-500";
+                            <div className="p-4 bg-white rounded-xl border border-slate-100 space-y-4 shadow-sm relative">
+                              <h3 className="text-xs sm:text-sm font-black text-slate-900 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                {quiz.question}
+                              </h3>
+
+                              <div className="grid grid-cols-1 gap-2.5">
+                                {quiz.options?.map((option, idx) => {
+                                  const isSelected = answerState?.selected === option;
+                                  const isCorrectOption = option === quiz.correctAnswer;
+                                  let buttonStyle = "bg-slate-50 border border-slate-200 hover:bg-slate-100/60 text-slate-800 active:scale-99";
+                                  
+                                  if (answerState) {
+                                    if (isCorrectOption) {
+                                      buttonStyle = "bg-emerald-50 border-2 border-emerald-500 text-emerald-900 font-extrabold shadow-sm";
+                                    } else if (isSelected && !isCorrectOption) {
+                                      buttonStyle = "bg-rose-50 border-2 border-rose-500 text-rose-900 font-extrabold shadow-sm";
                                     } else {
-                                      btnClass = "bg-slate-100 text-slate-405 border-slate-200 opacity-60 pointer-events-none";
+                                      buttonStyle = "bg-slate-50/40 border border-slate-100 text-slate-400 opacity-60 cursor-not-allowed";
                                     }
                                   }
 
                                   return (
                                     <button
                                       key={idx}
-                                      disabled={isAnswered}
+                                      disabled={!!answerState}
                                       onClick={() => {
-                                        const isCorrect = opt === aiParsed.correctAnswer;
+                                        const correct = option === quiz.correctAnswer;
                                         setAnsweredQuiz(prev => ({
                                           ...prev,
-                                          [ex.id]: { selected: opt, isCorrect }
+                                          [ex.id]: { selected: option, isCorrect: correct }
                                         }));
                                       }}
-                                      className={`p-3 text-xs font-bold rounded-xl border text-center transition cursor-pointer ${btnClass}`}
+                                      className={`w-full px-4 py-3.5 rounded-xl text-xs font-bold transition-all duration-200 flex justify-between items-center cursor-pointer ${buttonStyle}`}
                                     >
-                                      {opt}
+                                      <span>{option}</span>
+                                      {answerState && isCorrectOption && (
+                                        <span className="text-emerald-600 font-extrabold text-[10px] flex items-center gap-1 bg-emerald-100/50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                                          <span>ممتاز! إجابة صحيحة ✔️</span>
+                                        </span>
+                                      )}
+                                      {answerState && isSelected && !isCorrectOption && (
+                                        <span className="text-rose-600 font-extrabold text-[10px] flex items-center gap-1 bg-rose-100/50 px-2 py-0.5 rounded-lg border border-rose-200">
+                                          <span>حاول مجدداً ❌</span>
+                                        </span>
+                                      )}
                                     </button>
                                   );
                                 })}
                               </div>
+
+                              {answerState && (
+                                <motion.div 
+                                  initial={{ opacity: 0, scale: 0.95 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  className={`p-4 rounded-xl border text-center text-xs font-black ${
+                                    answerState.isCorrect 
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-250" 
+                                      : "bg-amber-50 text-amber-800 border-amber-250"
+                                  }`}
+                                >
+                                  {answerState.isCorrect ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <span className="text-lg">🌟👏🌟</span>
+                                      <span>أحسنت العمل يا بطل! إيجادك للجواب الصحيح فخر لك ولمعلمك! واصل العطاء المتميز!</span>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      <p>الإجابة المختارة ليست هي الخيار الصحيح لهذا السؤال. لا تخف، الخطأ طريق الفهم! ننصحك بالتركيز والمحاولة مرة أخرى.</p>
+                                      <button
+                                        onClick={() => {
+                                          setAnsweredQuiz(prev => {
+                                            const copy = { ...prev };
+                                            delete copy[ex.id];
+                                            return copy;
+                                          });
+                                        }}
+                                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl text-[10px] font-black shadow-sm cursor-pointer hover:from-amber-600 active:scale-95 transition-all"
+                                      >
+                                        إعادة المحاولة مجدداً 🔄
+                                      </button>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              )}
                             </div>
-
-                            {isAnswered && (
-                              <div className={`p-3 rounded-xl text-xs font-black flex items-center gap-2 ${
-                                answerDetails.isCorrect ? 'bg-emerald-50 text-emerald-800 border border-emerald-250' : 'bg-red-50 text-red-800 border border-red-200'
-                              }`}>
-                                <span>{answerDetails.isCorrect ? "أحسنت! إجابتك صحيحة وممتازة 👏" : "إجابة خاطئة. حاول التفكير فيها مرة أخرى!"}</span>
-                              </div>
-                            )}
                           </div>
-                        ) : (
-                          <div className="bg-slate-50/70 border border-slate-150 rounded-xl p-3 text-xs text-slate-700 font-bold whitespace-pre-wrap leading-relaxed shadow-inner">
-                            {ex.description}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex justify-between items-center text-[10px] pt-2 border-t border-slate-100 text-slate-400 font-sans">
-                        <span className="text-red-500 font-extrabold flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-red-400" />
-                          <span>آخر أجل للتقديم: {new Date(ex.dueDate).toLocaleDateString('ar-MA')}</span>
-                        </span>
-                        <span className="font-extrabold text-slate-450 bg-slate-100 px-2.5 py-1 rounded-md">مادة اللغة العربية</span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                        );
+                      } else {
+                        return (
+                          <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-bold whitespace-pre-line bg-white/50 p-3.5 rounded-xl border border-slate-100">
+                            {ex.text}
+                          </p>
+                        );
+                      }
+                    })()}
+                  </motion.div>
+                ))}
               </div>
             )}
           </div>
 
-          {/* Shared Storage Vault component */}
-          <div className="bg-white border border-sky-100 rounded-[28px] p-6 shadow-md shadow-sky-100/5">
-            <h2 className="text-sm sm:text-base font-black text-slate-900 pb-4 border-b border-sky-50 mb-5 flex items-center gap-2 select-none">
-              <FolderOpen className="h-5 w-5 text-sky-500" />
-              <span>حقيبة الوثائق التربوية والملخصات المشتركة</span>
-            </h2>
+          {/* Educational Cabinet */}
+          <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
+            <div className="absolute left-4 top-4 text-emerald-400 opacity-20 hover:opacity-100 transition-opacity">
+              <FolderOpen className="h-10 w-10" />
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-sky-100 mb-6 relative z-10">
+              <div className="space-y-1">
+                <h2 className="text-base sm:text-lg font-black text-slate-850 flex items-center gap-2">
+                  <span className="p-1.5 bg-emerald-100 text-emerald-600 rounded-xl">
+                    <FolderOpen className="h-4 w-4" />
+                  </span>
+                  <span>خزانة الوثائق والملفات التعليمية</span>
+                </h2>
+                <p className="text-xs text-slate-500 font-bold leading-relaxed">ملخصات، وثائق داعمة، وخطاطات تربوية وضعها المدرس رهن إشارتك</p>
+              </div>
+            </div>
 
             {isLoading ? (
-              <p className="text-xs text-indigo-500 text-center py-6 font-bold animate-pulse">جاري المزامنة مع الخزانة السحابية...</p>
+              <div className="text-center py-10 space-y-3">
+                <div className="w-8 h-8 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-emerald-600 font-extrabold">جاري مزامنة الملفات من السحابة...</p>
+              </div>
             ) : documents.length === 0 ? (
-              <p className="text-xs text-slate-405 text-center py-10 italic">لا توجد مستندات منشورة لصفك في الوقت الحالي.</p>
+              <div className="text-center py-12 bg-slate-50 border border-dashed border-slate-200 rounded-[24px] p-6 text-xs text-slate-500 font-bold">
+                لم ينشر المدرس أي صور أو وثائق دراسية لمستواك حالياً. سنخبرك عند توفرها!
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {documents.map((d) => (
-                  <div key={d.id} className="border border-sky-100/70 rounded-2xl p-4 bg-slate-50/50 flex flex-col justify-between gap-4 hover:shadow-md hover:bg-white transition duration-300">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    key={d.id}
+                    className="border border-sky-100 hover:border-sky-300 rounded-2xl p-4 bg-gradient-to-br from-white to-sky-50/15 flex flex-col justify-between hover:shadow-md transition-all duration-300 gap-4"
+                  >
                     <div className="space-y-3">
-                      <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                        <span className="px-2 py-0.5 rounded text-[8px] bg-sky-50 text-sky-800 font-black">المستوى {d.level === '5' ? '٥' : '٦'}</span>
-                        <span className="text-[8px] font-black text-slate-400 font-sans">{d.fileType}</span>
+                      <div className="flex items-center justify-between border-b border-slate-50 pb-1.5">
+                        <span className="px-2 py-0.5 rounded text-[8px] bg-emerald-50 text-emerald-705 font-black">
+                          {d.fileType}
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-bold font-sans">
+                          {new Date(d.createdAt).toLocaleDateString('ar-MA')}
+                        </span>
                       </div>
-
                       <div className="flex items-start gap-2.5">
                         {d.fileUrl.startsWith('data:image') || (d.fileUrl.startsWith('http') && (d.fileUrl.includes('.jpg') || d.fileUrl.includes('.png') || d.fileUrl.includes('.jpeg') || d.fileUrl.includes('unsplash'))) ? (
                           <img 
                             src={d.fileUrl} 
                             alt={d.name} 
                             referrerPolicy="no-referrer"
-                            className="h-10 w-10 rounded-lg object-cover bg-slate-100 border border-slate-200 shrink-0"
+                            className="h-10 w-10 rounded-lg object-cover bg-slate-100 shrink-0 border border-slate-200"
                           />
                         ) : (
                           <FileText className="h-10 w-10 text-sky-500 shrink-0" />
                         )}
-                        <div className="space-y-1">
-                          <h4 className="text-xs font-black text-slate-800 leading-snug line-clamp-2">{d.name}</h4>
-                          <em className="text-[9px] text-slate-400 block font-sans font-bold">{new Date(d.createdAt).toLocaleDateString('ar-MA')}</em>
+                        <div className="space-y-2">
+                          <h3 className="text-xs font-black text-slate-800 line-clamp-2 leading-tight">
+                            {d.name}
+                          </h3>
                         </div>
                       </div>
                     </div>
 
-                    <a 
-                      href={d.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold text-[10px] rounded-xl flex items-center justify-center gap-1.5 transition"
-                    >
-                      <FileDown className="h-4 w-4" />
-                      <span>تحميل وعرض المطبوع</span>
-                    </a>
-                  </div>
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[10px]">
+                      <a
+                        href={d.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-gradient-to-r from-sky-400 to-emerald-500 hover:from-sky-450 hover:to-emerald-600 text-white rounded-xl font-bold flex items-center gap-1 w-full justify-center transition-all duration-200 text-xs shadow-sm"
+                      >
+                        <FileDown className="h-3.5 w-3.5" />
+                        <span>عرض وتحميل الملف</span>
+                      </a>
+                    </div>
+                  </motion.div>
                 ))}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Panel: Performance & Scores Summary */}
+        {/* Right Column: Grades and Absences */}
         <div className="lg:col-span-4 space-y-6">
           
-          {/* Performance tracking card */}
-          <div className="bg-white border border-sky-100 rounded-[28px] p-6 shadow-md shadow-sky-100/5">
-            <h2 className="text-xs sm:text-sm font-black text-slate-900 pb-3 border-b border-sky-50 mb-4 flex items-center gap-2 select-none">
-              <Award className="h-5 w-5 text-indigo-500" />
-              <span>نتائجك ومعدلات الفروض المحصلة</span>
+          {/* Section 1: Academic Grades / Marks */}
+          <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
+            <h2 className="text-xs sm:text-sm font-black text-slate-850 pb-3 border-b border-sky-100 mb-5 flex items-center gap-2">
+              <span className="p-1.5 bg-sky-150 text-sky-600 rounded-xl">
+                <Award className="h-4.5 w-4.5" />
+              </span>
+              <span>سجل المعدلات والنقط الدراسية</span>
             </h2>
-
+            
             {isLoading ? (
-              <p className="text-xs text-slate-400 text-center py-6 font-bold animate-pulse">جاري سحب النقط...</p>
+              <div className="text-center py-8 space-y-3">
+                <div className="w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-[11px] text-sky-600 font-bold">جاري المزامنة النشطة...</p>
+              </div>
             ) : scores.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-8 italic">لم يسجل التاريخ أي معدلات بعد.</p>
+              <p className="text-xs text-slate-500 text-center py-8 rounded-2xl bg-slate-50 border border-slate-150 font-bold leading-relaxed">
+                لم تقم الإدارة التعليمية برصد أي نقط رسمية لك حتى الآن. واصل الاجتهاد!
+              </p>
             ) : (
               <div className="space-y-3">
                 {scores.map((sc) => (
-                  <div key={sc.id} className="p-3 bg-gradient-to-r from-slate-50 to-white border border-slate-100 rounded-xl flex justify-between items-center hover:border-sky-200 transition">
-                    <div className="space-y-0.5">
-                      <span className="text-[10px] text-indigo-650 font-black block">{sc.subject}</span>
-                      <em className="text-[9px] text-slate-400 block not-italic font-bold">{sc.type}</em>
+                  <div key={sc.id} className="p-4 bg-gradient-to-br from-white to-sky-50/10 border border-sky-100 rounded-2xl flex justify-between items-center hover:bg-sky-50/20 transition-all duration-200">
+                    <div className="space-y-1">
+                      <div className="text-xs font-black text-slate-800">{sc.studentName}</div>
+                      <div className="text-[10px] text-slate-500 font-extrabold flex items-center gap-1">
+                        <span className="text-sky-600 font-bold">{sc.subject}</span>
+                        <span>•</span>
+                        <span>{sc.scoreType}</span>
+                      </div>
                     </div>
-                    <span className="text-[13px] font-sans font-black text-slate-900 bg-sky-100 rounded-lg px-2.5 py-1">
-                      {sc.score}
+                    
+                    <div className="text-xs font-sans font-black text-white bg-gradient-to-r from-sky-500 to-indigo-500 rounded-xl px-3 py-2 shadow-sm shadow-sky-200">
+                      {sc.scoreValue}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Section 2: Personal Absence Records */}
+          <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
+            <h2 className="text-xs sm:text-sm font-black text-slate-850 pb-3 border-b border-sky-100 mb-5 flex items-center gap-2">
+              <span className="p-1.5 bg-sky-150 text-sky-650 rounded-xl">
+                <Clock className="h-4.5 w-4.5" />
+              </span>
+              <span>سجل الغياب والانضباط المدرسي</span>
+            </h2>
+
+            {isLoading ? (
+              <div className="text-center py-8 space-y-2">
+                <div className="w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-[11px] text-sky-600 font-bold">جاري القراءة...</p>
+              </div>
+            ) : absences.length === 0 ? (
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 text-emerald-900 border-2 border-emerald-100/80 p-5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm shadow-emerald-50/40 flex flex-col items-center text-center gap-3">
+                <div className="bg-emerald-100 p-2 rounded-full text-emerald-600">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="font-extrabold text-emerald-950 text-xs">حضورك كامل وممتاز!</h4>
+                  <p className="text-emerald-850 text-[11px] font-semibold leading-relaxed">
+                    تفخر المؤسسة التربوية بأنك لم تسجل أي غياب! نسبة انضباطك الدراسي تبلغ 100%. واصل هذا العطاء المتميز!
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {absences.map((ab) => (
+                  <div key={ab.id} className="p-4 bg-gradient-to-br from-white to-red-50/10 border border-red-50 rounded-2xl flex justify-between items-center hover:bg-slate-50 transition-all duration-200">
+                    <div className="space-y-1">
+                      <div className="text-xs font-black text-slate-800">{ab.studentName}</div>
+                      <div className="text-[10px] text-slate-500 font-sans font-extrabold flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-rose-450" />
+                        <span>تاريخ الغياب: {ab.date}</span>
+                      </div>
+                    </div>
+                    
+                    <span className={`px-2.5 py-1.5 rounded-xl text-[9px] font-extrabold ${
+                      ab.absenceType === 'غياب مبرر' 
+                        ? 'bg-emerald-50 text-emerald-800 border-2 border-emerald-100/50' 
+                        : 'bg-rose-50 text-rose-800 border-2 border-rose-100'
+                    }`}>
+                      {ab.absenceType}
                     </span>
                   </div>
                 ))}
               </div>
             )}
           </div>
-
-          {/* Absences count warning card */}
-          <div className="bg-white border border-sky-105 rounded-[28px] p-6 shadow-sm shadow-sky-100/5">
-            <h2 className="text-xs sm:text-sm font-black text-slate-900 pb-3 border-b border-sky-50 mb-4 flex items-center gap-2 select-none">
-              <Calendar className="h-5 w-5 text-red-500" />
-              <span>سجل التغيبات المفروضة لليقظة</span>
-            </h2>
-
-            {isLoading ? (
-              <p className="text-xs text-slate-400 text-center py-6 font-bold animate-pulse">جاري القراءة...</p>
-            ) : absences.length === 0 ? (
-              <div className="text-center py-6 bg-emerald-50/20 border border-emerald-100 rounded-xl">
-                <p className="text-[11px] text-emerald-800 font-extrabold">✓ حضورك مثالي وكامل بنسبة 100%!</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="bg-red-50 border border-red-155 text-red-955 p-3 rounded-xl text-xs font-black select-none text-center">
-                  انتبه! لديك {absences.length} أيام غياب مسجلة.
-                </div>
-                {absences.map((ab) => (
-                  <div key={ab.id} className="p-3 bg-white border border-slate-100 rounded-xl space-y-1">
-                    <div className="flex justify-between items-center text-[10px] font-sans">
-                      <span className="text-red-505 font-black">{new Date(ab.date).toLocaleDateString('ar-MA')}</span>
-                      <span className="text-slate-400 font-bold">المستوى {currentLevel} ابتدائي</span>
-                    </div>
-                    <p className="text-[11px] text-slate-700 font-semibold leading-relaxed leading-normal">{ab.reason}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          
         </div>
-
+        
       </div>
     </div>
   );
