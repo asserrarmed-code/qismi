@@ -27,6 +27,13 @@ let auth: any = null;
 let storage: any = null;
 let isFirebaseAvailable = false;
 
+function deactivateFirebase() {
+  if (isFirebaseAvailable) {
+    isFirebaseAvailable = false;
+    console.warn("Firebase deactivated dynamically: App is now operating purely in Local Storage fallback mode.");
+  }
+}
+
 const hasValidConfig = finalConfig.apiKey !== "" && finalConfig.projectId !== "";
 
 if (hasValidConfig) {
@@ -38,24 +45,27 @@ if (hasValidConfig) {
     isFirebaseAvailable = true;
     console.log("Firebase initialized successfully using unified configuration.");
 
-    // Validate connection dynamically as mandated by security skill
+    // Validate connection dynamically
     const testConnection = async () => {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
       } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Firebase is offline. Please check your network and configuration.");
+        const errMessage = error instanceof Error ? error.message : String(error);
+        if (errMessage.includes('offline') || errMessage.includes('Failed to get document') || errMessage.includes('network') || errMessage.includes('unreachable')) {
+          deactivateFirebase();
+          console.warn("Firebase is offline. Operations will gracefully fallback to Local Storage.");
         }
       }
     };
     testConnection();
 
   } catch (error) {
-    console.error("Firebase SDK failed to load:", error);
+    isFirebaseAvailable = false;
+    console.warn("Firebase SDK failed to load. Operating in local storage mode. Details:", error);
   }
 } else {
   console.warn("Firebase config is empty. System is operating in optimized Local Storage mode.");
 }
 
-export { db, auth, storage, isFirebaseAvailable };
+export { db, auth, storage, isFirebaseAvailable, deactivateFirebase };
 export default app;
