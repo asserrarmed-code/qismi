@@ -16,6 +16,8 @@ export interface UserSession {
   role: UserRole;
   displayName: string;
   level?: '5' | '6';
+  subject?: string;
+  assignedClasses?: string[];
 }
 
 export interface Exercise {

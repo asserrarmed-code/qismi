@@ -56,9 +56,10 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
 
   // AI Question Generator States
   const [aiLevel, setAiLevel] = useState<'5' | '6'>('5');
-  const [aiComponent, setAiComponent] = useState<'التراكيب' | 'الصرف والتحويل' | 'الإملاء'>('التراكيب');
+  const [aiComponent, setAiComponent] = useState<string>('التراكيب');
+  const [aiLanguage, setAiLanguage] = useState<'auto' | 'ar_vocalized' | 'fr'>('auto');
   const [aiLessonName, setAiLessonName] = useState('');
-  const [aiQuestionCount, setAiQuestionCount] = useState<number>(1);
+  const [aiQuestionCount, setAiQuestionCount] = useState<number>(3);
   const [aiGeneratedQuestions, setAiGeneratedQuestions] = useState<{question: string; correctAnswer: string; wrongAnswer1: string; wrongAnswer2: string}[]>([]);
   const [aiGeneratedQuestion, setAiGeneratedQuestion] = useState('');
   const [aiCorrectAnswer, setAiCorrectAnswer] = useState('');
@@ -615,7 +616,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
           level: aiLevel,
           component: aiComponent,
           lessonName: aiLessonName.trim(),
-          count: aiQuestionCount
+          count: aiQuestionCount,
+          language: aiLanguage
         })
       });
 
@@ -1262,10 +1264,43 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       value={aiComponent}
                       onChange={(e: any) => setAiComponent(e.target.value)}
                     >
-                      <option value="التراكيب">📚 مكون التراكيب</option>
-                      <option value="الصرف والتحويل">📚 مكون الصرف والتحويل</option>
-                      <option value="الإملاء">📚 مكون الإملاء</option>
+                      <option value="التراكيب">📚 مكون التراكيب (العربية)</option>
+                      <option value="الصرف والتحويل">📚 مكون الصرف والتحويل (العربية)</option>
+                      <option value="الإملاء">📚 مكون الإملاء (العربية)</option>
+                      <option value="Grammaire">🇫🇷 Grammaire (Français)</option>
+                      <option value="Conjugaison">🇫🇷 Conjugaison (Français)</option>
+                      <option value="Orthographe">🇫🇷 Orthographe (Français)</option>
+                      <option value="Lexique">🇫🇷 Lexique (Français)</option>
+                      <option value="Activités Orales">🇫🇷 Activités Orales (Français)</option>
+                      <option value="الرياضيات / Mathématiques">📐 الرياضيات / Mathématiques</option>
                     </select>
+                  </div>
+
+                  {/* Subject Language selector */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-extrabold text-indigo-900">
+                      لغة الأسئلة ومنهجية التوليد:
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: 'auto', label: '🔍 كشف تلقائي (حسب الدرس)' },
+                        { id: 'ar_vocalized', label: '✍️ عربية فصيحة (كاملة التشكيل)' },
+                        { id: 'fr', label: '🇫🇷 الفرنسية (Français)' },
+                      ].map((lang) => (
+                        <button
+                          type="button"
+                          key={lang.id}
+                          onClick={() => setAiLanguage(lang.id as any)}
+                          className={`py-2 px-1.5 border rounded-xl text-[10px] font-black transition cursor-pointer text-center ${
+                            aiLanguage === lang.id
+                              ? 'bg-indigo-50 border-indigo-400 text-indigo-600 font-extrabold ring-2 ring-indigo-100'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {lang.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Lesson context field */}
@@ -1288,17 +1323,37 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     <label className="block text-xs font-extrabold text-indigo-900">
                       عدد الأسئلة التفاعلية المراد صياغتها:
                     </label>
-                    <select
-                      className="w-full px-4 py-3 bg-white border border-slate-205 rounded-2xl focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/40 text-xs font-bold text-slate-800 transition-all duration-200 cursor-pointer"
-                      value={aiQuestionCount}
-                      onChange={(e: any) => setAiQuestionCount(parseInt(e.target.value) || 1)}
-                    >
-                      <option value="1">1️⃣ سؤال تفاعلي واحد فقط</option>
-                      <option value="2">2️⃣ سؤالين تفاعليين (2)</option>
-                      <option value="3">3️⃣ ثلاثة أسئلة تعليمية (3)</option>
-                      <option value="4">4️⃣ أربعة أسئلة تعليمية (4)</option>
-                      <option value="5">5️⃣ باقة كاملة من 5 أسئلة (5)</option>
-                    </select>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        max="30"
+                        className="w-full sm:w-28 px-4 py-3 bg-white border border-slate-205 rounded-2xl focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/40 text-xs font-bold text-slate-800 transition-all duration-200"
+                        value={aiQuestionCount}
+                        onChange={(e) => setAiQuestionCount(Math.min(30, Math.max(1, parseInt(e.target.value) || 1)))}
+                      />
+                      {/* Presets */}
+                      <div className="flex flex-wrap gap-1 items-center">
+                        {[3, 5, 8, 10, 15, 20].map((num) => (
+                          <button
+                            type="button"
+                            key={num}
+                            onClick={() => setAiQuestionCount(num)}
+                            className={`px-3 py-2 text-[10px] font-black rounded-xl transition border cursor-pointer ${
+                              aiQuestionCount === num
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block pr-1.5 select-none leading-relaxed">
+                      💡 يمكنك كتابة أي رقم تريده مباشرة في خانة الإدخال (مثلاً: 3، 6، 8، 12، 16...). الحد الأقصى الموصى به لضمان استقرار البناء هو 25 سؤالاً.
+                    </span>
                   </div>
 
                   <button

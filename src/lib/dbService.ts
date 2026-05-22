@@ -339,7 +339,9 @@ export const dbService = {
               username: userData.username,
               role: userRole,
               displayName: userData.displayName || userData.username,
-              level: userData.level
+              level: userData.level,
+              subject: userData.subject || '',
+              assignedClasses: userData.assignedClasses || []
             };
             localStorage.setItem('edu_session', JSON.stringify(session));
             return session;
@@ -411,7 +413,9 @@ export const dbService = {
         username: localMatched.username,
         role: userRole,
         displayName: localMatched.displayName,
-        level: localMatched.level
+        level: localMatched.level,
+        subject: localMatched.subject || '',
+        assignedClasses: localMatched.assignedClasses || []
       };
       localStorage.setItem('edu_session', JSON.stringify(session));
       return session;
@@ -480,7 +484,16 @@ export const dbService = {
   },
 
   // Super Admin API: Save or modify user details (Create teacher, student, admin, or modify password)
-  saveUserAccount: async (user: { id?: string; username: string; displayName: string; role: 'superadmin' | 'teacher' | 'student'; level?: '5' | '6'; password: string }): Promise<void> => {
+  saveUserAccount: async (user: { 
+    id?: string; 
+    username: string; 
+    displayName: string; 
+    role: 'superadmin' | 'teacher' | 'student'; 
+    level?: '5' | '6'; 
+    password: string;
+    subject?: string;
+    assignedClasses?: string[];
+  }): Promise<void> => {
     const uid = user.id || `uid_${user.username.trim().toLowerCase()}`;
     const logPath = `users/${uid}`;
     
@@ -490,6 +503,8 @@ export const dbService = {
       role: user.role,
       level: user.level || '5',
       password: user.password.trim(),
+      subject: user.subject || '',
+      assignedClasses: user.assignedClasses || [],
       updatedAt: new Date().toISOString()
     };
     
@@ -516,19 +531,19 @@ export const dbService = {
       const localStudentAccounts = getLocalItems<any>('edu_student_accounts');
       const idx = localStudentAccounts.findIndex(u => u.id === uid);
       const studPayload = {
-        id: uid,
-        username: user.username.trim().toLowerCase(),
-        displayName: user.displayName.trim(),
-        level: user.level || '5',
-        password: user.password.trim(),
-        notes: '',
-        role: 'student',
-        createdAt: new Date().toISOString()
+         id: uid,
+         username: user.username.trim().toLowerCase(),
+         displayName: user.displayName.trim(),
+         level: user.level || '5',
+         password: user.password.trim(),
+         notes: '',
+         role: 'student',
+         createdAt: new Date().toISOString()
       };
       if (idx !== -1) {
-        localStudentAccounts[idx] = studPayload;
+         localStudentAccounts[idx] = studPayload;
       } else {
-        localStudentAccounts.push(studPayload);
+         localStudentAccounts.push(studPayload);
       }
       saveLocalItems('edu_student_accounts', localStudentAccounts);
     }
@@ -1247,5 +1262,64 @@ export const dbService = {
     const localNotes = getLocalItems<any>('edu_student_notes');
     const updatedNotes = localNotes.filter((n: any) => n.id !== uid);
     saveLocalItems('edu_student_notes', updatedNotes);
+  },
+
+  getStudentsForTeacher: async (teacherUid: string): Promise<any[]> => {
+    // 1. Fetch teacher details to know their assigned classes
+    let teacherProfile: any = null;
+    if (isFirebaseAvailable) {
+      try {
+        const docSnap = await getDoc(doc(db, 'users', teacherUid));
+        if (docSnap.exists()) {
+          teacherProfile = docSnap.data();
+        }
+      } catch (err) {
+        console.warn("Error fetching teacher profile from Firebase:", err);
+      }
+    }
+
+    if (!teacherProfile) {
+      const localUsers = getLocalItems<any>('edu_users_all');
+      teacherProfile = localUsers.find(u => u.id === teacherUid);
+    }
+
+    // Default custom teacher fallback if it's the custom teacher
+    if (!teacherProfile && teacherUid === 'custom_teacher') {
+      const customTeacher = dbService.getCustomTeacher();
+      if (customTeacher) teacherProfile = customTeacher;
+    }
+
+    const assigned = teacherProfile?.assignedClasses || [];
+    
+    // 2. Fetch all student accounts
+    const allStudents = await dbService.getStudentAccounts();
+    
+    // If assignedClasses is empty, teacher is not assigned to any class yet, return empty list
+    if (assigned.length === 0) {
+      return [];
+    }
+
+    // 3. Filter students whose level is in the teacher's assignedClasses
+    return allStudents.filter(student => assigned.includes(student.level));
+  },
+
+  getTeachersForStudent: async (studentLevel: '5' | '6'): Promise<any[]> => {
+    // 1. Fetch all users
+    const allUsers = await dbService.getAllUsers();
+    
+    // 2. Filter teachers who have role 'teacher' and whose assignedClasses contains studentLevel
+    const teachers = allUsers.filter(u => {
+      const isTeacher = u.role === 'teacher' || u.role === UserRole.TEACHER;
+      const isAssigned = u.assignedClasses && Array.isArray(u.assignedClasses) && u.assignedClasses.includes(studentLevel);
+      return isTeacher && isAssigned;
+    });
+
+    return teachers.map(t => ({
+      id: t.id,
+      displayName: t.displayName || t.username,
+      role: 'teacher',
+      subject: t.subject || 'غير محدد',
+      assignedClasses: t.assignedClasses || []
+    }));
   }
 };
