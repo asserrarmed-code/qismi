@@ -160,5 +160,10 @@ service cloud.firestore {
       
       allow delete: if isTeacher();
     }
+
+    // --- Users match block ---
+    match /users/{userId} {
+      allow read, write: if true;
+    }
   }
 }

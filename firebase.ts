@@ -9,7 +9,7 @@ import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// الدمج بين متغيرات البيئة وملف الإعدادات المحلي (مع إعطاء الأولوية لمتغيرات البيئة VITE_*)
+// Combine Environment Variables with local JSON configuration (giving priority to environment variables VITE_*)
 const finalConfig = {
   apiKey: (import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig?.apiKey || "").trim(),
   authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig?.authDomain || "").trim(),
@@ -20,7 +20,7 @@ const finalConfig = {
   firestoreDatabaseId: (import.meta.env.VITE_FIREBASE_DATABASE_ID || firebaseConfig?.firestoreDatabaseId || "").trim(),
 };
 
-// تهيئة متغيرات الأمان الأساسية
+// Initialize safety variables
 let app: any = null;
 let db: any = null;
 let auth: any = null;
@@ -34,26 +34,26 @@ function deactivateFirebase() {
   }
 }
 
-// التحقق من توافر إعدادات صالحة لتجنب انهيار التطبيق عند بدء التشغيل
+// Check if we have a valid configuration to initialize Firebase
 const hasValidConfig = finalConfig.apiKey !== "" && finalConfig.projectId !== "";
 
 if (hasValidConfig) {
   try {
-    // تهيئة تطبيق Firebase بشكل صحيح
+    // Correctly initialize Firebase app
     app = getApps().length === 0 ? initializeApp(finalConfig) : getApp();
     
-    // تهيئة قاعدة بيانات Firestore بالاعتماد على معرف قاعدة البيانات المحدد (هام للحالات الافتراضية والخاصة)
+    // Correctly initialize Firestore with App and databaseId (Critical for non-default or standard database instances)
     const dbId = finalConfig.firestoreDatabaseId || "(default)";
     db = getFirestore(app, dbId);
     
-    // تهيئة خدمات المصادقة والتخزين السحابي
+    // Initialize standard Auth and Storage
     auth = getAuth(app);
     storage = getStorage(app);
     isFirebaseAvailable = true;
     
     console.log("Firebase initialized successfully using unified secure environment configuration.");
 
-    // التحقق الديناميكي من الاتصال تماشيًا مع إرشادات فحص الشبكة
+    // Validate connection dynamically using getFromServer as instructed in validation guides
     const testConnection = async () => {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));

@@ -7,9 +7,10 @@ import { useState, useEffect } from 'react';
 import { isFirebaseAvailable } from './lib/firebase';
 import { dbService } from './lib/dbService';
 import { UserSession, UserRole } from './types';
-import Login from './components/Login';
+import Login from './components/LoginPage';
 import TeacherDashboard from './components/TeacherDashboard';
 import StudentDashboard from './components/StudentDashboard';
+import SuperAdminDashboard from './components/SuperAdminDashboard';
 
 export default function App() {
   const [session, setSession] = useState<UserSession | null>(null);
@@ -49,6 +50,12 @@ export default function App() {
       <main className="w-full">
         {!session ? (
           <Login onLoginSuccess={handleLoginSuccess} />
+        ) : session.role === UserRole.SUPERADMIN ? (
+          <SuperAdminDashboard 
+            session={session} 
+            onLogout={handleLogout} 
+            firebaseStatus={firebaseStatusText} 
+          />
         ) : session.role === UserRole.TEACHER ? (
           <TeacherDashboard 
             session={session} 

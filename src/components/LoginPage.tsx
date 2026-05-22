@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { dbService } from '../lib/dbService';
 import { UserSession } from '../types';
@@ -15,6 +15,7 @@ import {
   AlertCircle, 
   UserCheck, 
   ShieldCheck, 
+  CheckCircle,
   FileText,
   TrendingUp,
   Clock

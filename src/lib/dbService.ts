@@ -700,7 +700,7 @@ export const dbService = {
     return filteredSeed;
   },
 
-  addScore: async (studentName: string, level: '5' | '6', subject: string, scoreValue: string, scoreType: 'نقطة المراقبة مستمرة' | 'الفرض'): Promise<Score> => {
+  addScore: async (studentName: string, level: '5' | '6', subject: string, scoreValue: string, scoreType: 'نقطة المراقبة المستمرة' | 'الفرض'): Promise<Score> => {
     const logPath = 'scores';
     const newScore: Omit<Score, 'id'> = {
       studentName: studentName.trim(),

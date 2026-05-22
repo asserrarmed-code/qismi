@@ -277,7 +277,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                   </span>
                   <span>الأنشطة المدرسية والواجبات المقررة</span>
                 </h2>
-                <p className="text-xs text-slate-500 font-bold leading-relaxed">المهام الفردية والتمارين المنزلية التي نشرها مدرسك المعتمد</p>
+                <p className="text-xs text-slate-500 font-bold leading-relaxed">المهام الفردية والتمارين المنزلية التي نشرها مدرسك المعتمر</p>
               </div>
               
               {/* Category selector button tabs */}
@@ -432,7 +432,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                                       )}
                                       {answerState && isSelected && !isCorrectOption && (
                                         <span className="text-rose-600 font-extrabold text-[10px] flex items-center gap-1 bg-rose-100/50 px-2 py-0.5 rounded-lg border border-rose-200">
-                                          <span>حاولة مجدداً ❌</span>
+                                          <span>حاول مجدداً ❌</span>
                                         </span>
                                       )}
                                     </button>

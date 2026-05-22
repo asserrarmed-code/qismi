@@ -4,6 +4,7 @@
  */
 
 export enum UserRole {
+  SUPERADMIN = 'SUPERADMIN',
   TEACHER = 'TEACHER',
   STUDENT_5 = 'STUDENT_5',
   STUDENT_6 = 'STUDENT_6',
