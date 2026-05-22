@@ -73,6 +73,7 @@ function parseAiQuestion(text: string): ParsedQuestion {
     }
 
     if (!question || !correctAnswer) {
+      // Fallback parser down the line
       const qIndex = lines.findIndex(l => l.includes("السؤال:") || l.startsWith("السؤال:"));
       if (qIndex !== -1) {
         question = lines[qIndex].replace("السؤال:", "").trim();
@@ -94,6 +95,7 @@ function parseAiQuestion(text: string): ParsedQuestion {
       }
     }
 
+    // Stable options array sorted alphabetically so they don't shift randomly during component renders
     const rawOptions = [correctAnswer, wrong1, wrong2].filter(Boolean);
     const uniqueOptions = Array.from(new Set(rawOptions));
     const sortedOptions = [...uniqueOptions].sort((a, b) => a.localeCompare(b, 'ar'));
@@ -113,7 +115,7 @@ function parseAiQuestion(text: string): ParsedQuestion {
 }
 
 export default function StudentDashboard({ session, onLogout, firebaseStatus }: StudentDashboardProps) {
-  const currentLevel = session.level || '5';
+  const currentLevel = session.level || '5'; // '5' or '6'
   
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
@@ -155,6 +157,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
     fetchData();
   }, [currentLevel, session.uid]);
 
+  // Filters the exercises by category
   const filteredExercises = exercises.filter(
     ex => selectedCategoryFilter === 'all' || ex.category === selectedCategoryFilter
   );
@@ -162,7 +165,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 select-none" dir="rtl">
       
-      {/* Student Portal Header */}
+      {/* Student Portal Header - Modern, Soft Educational Sky Gradient */}
       <motion.div 
         initial={{ opacity: 0, y: -15 }}
         animate={{ opacity: 1, y: 0 }}
@@ -206,7 +209,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         </button>
       </motion.div>
 
-      {/* Teacher's Note Section */}
+      {/* Teacher's Note Section - Highlighted & Elegant Display */}
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
@@ -235,7 +238,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         </div>
       </motion.div>
 
-      {/* Level Segregation Ribbon */}
+      {/* Level Segregation Information Ribbon - Friendly warning card */}
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -261,6 +264,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         {/* Left Column: Interactive Assigned Works / Exercises */}
         <div className="lg:col-span-8 space-y-6">
           <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
+            
             <div className="absolute right-4 top-4 text-sky-400 opacity-20 hover:opacity-100 transition-opacity">
               <BookOpen className="h-10 w-10" />
             </div>
@@ -273,9 +277,10 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                   </span>
                   <span>الأنشطة المدرسية والواجبات المقررة</span>
                 </h2>
-                <p className="text-xs text-slate-500 font-bold leading-relaxed">المهام الفردية والتمارين المنزلية التي نشرها مدرسك المعتمر</p>
+                <p className="text-xs text-slate-500 font-bold leading-relaxed">المهام الفردية والتمارين المنزلية التي نشرها مدرسك المعتمد</p>
               </div>
               
+              {/* Category selector button tabs */}
               <div className="flex bg-slate-100 border border-slate-200/60 p-1 rounded-2xl text-xs w-full sm:w-auto overflow-x-auto gap-0.5 shrink-0 select-none">
                 <button
                   onClick={() => setSelectedCategoryFilter('all')}
@@ -327,7 +332,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
               </div>
             ) : filteredExercises.length === 0 ? (
               <div className="text-center py-14 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[24px] p-8 space-y-3">
-                <div className="bg-slate-105 p-3 rounded-full w-14 h-14 mx-auto flex items-center justify-center text-slate-400">
+                <div className="bg-slate-100 p-3 rounded-full w-14 h-14 mx-auto flex items-center justify-center text-slate-400">
                   <Smile className="h-8 w-8 text-sky-400" />
                 </div>
                 <h3 className="text-sm font-black text-slate-800">لا توجد أي واجبات أو أنشطة مقررة</h3>
@@ -350,17 +355,19 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                           ex.category === 'فرض' 
                             ? 'bg-rose-50 text-rose-800 border-2 border-rose-100' 
                             : ex.category === 'مراقبة مستمرة' 
-                              ? 'bg-amber-50 text-amber-800 border-2 border-amber-150' 
-                              : 'bg-emerald-50 text-emerald-800 border-2 border-emerald-150'
+                              ? 'bg-amber-50 text-amber-800 border-2 border-amber-200' 
+                              : 'bg-emerald-50 text-emerald-800 border-2 border-emerald-200'
                         }`}>
                           {ex.category === 'فرض' ? '📝 فرض صفي' : ex.category === 'مراقبة مستمرة' ? '⭐ مراقبة دورية' : '✏️ تمرين منزلي'}
                         </span>
+                        
                         <span className="px-2 py-1 bg-sky-100 text-sky-700 rounded-lg text-[9px] font-bold">
                           المستوى {ex.level}
                         </span>
                       </div>
+                      
                       <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1 font-sans">
-                        <CalendarDays className="h-3.5 w-3.5 text-sky-450" />
+                        <CalendarDays className="h-3.5 w-3.5 text-sky-400" />
                         <span>{new Date(ex.createdAt).toLocaleDateString('ar-MA')}</span>
                       </div>
                     </div>
@@ -371,7 +378,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                         const answerState = answeredQuiz[ex.id];
                         return (
                           <div className="space-y-4">
-                            <div className="bg-gradient-to-r from-indigo-50 to-sky-50 p-4 rounded-xl border border-indigo-150 text-indigo-950 font-black text-xs flex justify-between items-center flex-wrap gap-2">
+                            <div className="bg-gradient-to-r from-indigo-50 to-sky-50 p-4 rounded-xl border border-indigo-200 text-indigo-950 font-black text-xs flex justify-between items-center flex-wrap gap-2">
                               <span className="flex items-center gap-1.5">
                                 <Sparkles className="h-4 w-4 text-indigo-500 animate-bounce" />
                                 <span>سؤال تفاعلي ذكي مدعوم بالذكاء الاصطناعي ✨</span>
@@ -425,7 +432,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                                       )}
                                       {answerState && isSelected && !isCorrectOption && (
                                         <span className="text-rose-600 font-extrabold text-[10px] flex items-center gap-1 bg-rose-100/50 px-2 py-0.5 rounded-lg border border-rose-200">
-                                          <span>حاول مجدداً ❌</span>
+                                          <span>حاولة مجدداً ❌</span>
                                         </span>
                                       )}
                                     </button>
@@ -439,8 +446,8 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                                   animate={{ opacity: 1, scale: 1 }}
                                   className={`p-4 rounded-xl border text-center text-xs font-black ${
                                     answerState.isCorrect 
-                                      ? "bg-emerald-50 text-emerald-800 border-emerald-250" 
-                                      : "bg-amber-50 text-amber-800 border-amber-250"
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
+                                      : "bg-amber-50 text-amber-800 border-amber-200"
                                   }`}
                                 >
                                   {answerState.isCorrect ? (
@@ -484,7 +491,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
             )}
           </div>
 
-          {/* Educational Cabinet */}
+          {/* Section: Educational Cabinet / Shared Documents */}
           <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
             <div className="absolute left-4 top-4 text-emerald-400 opacity-20 hover:opacity-100 transition-opacity">
               <FolderOpen className="h-10 w-10" />
@@ -522,7 +529,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                   >
                     <div className="space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-50 pb-1.5">
-                        <span className="px-2 py-0.5 rounded text-[8px] bg-emerald-50 text-emerald-705 font-black">
+                        <span className="px-2 py-0.5 rounded text-[8px] bg-emerald-50 text-emerald-700 font-black">
                           {d.fileType}
                         </span>
                         <span className="text-[9px] text-slate-400 font-bold font-sans">
@@ -572,7 +579,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
           {/* Section 1: Academic Grades / Marks */}
           <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
             <h2 className="text-xs sm:text-sm font-black text-slate-850 pb-3 border-b border-sky-100 mb-5 flex items-center gap-2">
-              <span className="p-1.5 bg-sky-150 text-sky-600 rounded-xl">
+              <span className="p-1.5 bg-sky-100 text-sky-600 rounded-xl">
                 <Award className="h-4.5 w-4.5" />
               </span>
               <span>سجل المعدلات والنقط الدراسية</span>
@@ -612,7 +619,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
           {/* Section 2: Personal Absence Records */}
           <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
             <h2 className="text-xs sm:text-sm font-black text-slate-850 pb-3 border-b border-sky-100 mb-5 flex items-center gap-2">
-              <span className="p-1.5 bg-sky-150 text-sky-650 rounded-xl">
+              <span className="p-1.5 bg-sky-100 text-sky-600 rounded-xl">
                 <Clock className="h-4.5 w-4.5" />
               </span>
               <span>سجل الغياب والانضباط المدرسي</span>
@@ -642,7 +649,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                     <div className="space-y-1">
                       <div className="text-xs font-black text-slate-800">{ab.studentName}</div>
                       <div className="text-[10px] text-slate-500 font-sans font-extrabold flex items-center gap-1">
-                        <Calendar className="h-3 w-3 text-rose-450" />
+                        <Calendar className="h-3 w-3 text-rose-400" />
                         <span>تاريخ الغياب: {ab.date}</span>
                       </div>
                     </div>
