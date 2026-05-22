@@ -615,10 +615,28 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
         })
       });
 
-      const resData = await response.json();
+      const contentType = response.headers.get('content-type');
       if (!response.ok) {
-        throw new Error(resData.error || 'حدث فشل غير معروف أثناء محاولة الاتصال بالسيرفر.');
+        let errorMsg = 'حدث فشل غير معروف أثناء محاولة الاتصال بالسيرفر.';
+        if (contentType && contentType.includes('application/json')) {
+          const resData = await response.json();
+          errorMsg = resData.error || errorMsg;
+        } else {
+          const text = await response.text();
+          if (response.status === 404) {
+            errorMsg = "مسار التوليد غير متوفر (404 Not Found). في حال الاستضافة على Vercel، يرجى التأكد من تفعيل الدوال السحابية Serverless Functions والتحقق من بقية الملفات.";
+          } else {
+            errorMsg = `خطأ في الخادم (كود ${response.status}): ${text.slice(0, 150)}`;
+          }
+        }
+        throw new Error(errorMsg);
       }
+
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error("سيرفر الاستضافة أرجع استجابة غير صالحة بغير صيغة JSON. تأكد من تفعيل الدوال السحابية /api/generate-question على خادم المستضيف.");
+      }
+
+      const resData = await response.json();
 
       if (resData.success && resData.data) {
         setAiGeneratedQuestion(resData.data.question || '');
@@ -628,10 +646,17 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
         setShowAiPreview(true);
         setAiGeneratorSuccess('تم توليد السؤال بنجاح! راجع خياراته بدقة وعدلها إن لزم الأمر ثم اضغط نشر.');
       } else {
-        throw new Error('الاستجابة المستلمة من السيرفر غير مطابقة للتعليمات.');
+        throw new Error('الاستجابة المستلمة من السيرفر غير مطابقة للتعليمات البنيوية.');
       }
     } catch (err: any) {
-      setAiGeneratorError('حدث خطأ في الاتصال بنظام الذكاء الاصطناعي، يرجى التأكد من صلاحية مفتاح الـ API (VITE_GEMINI_API_KEY) ومحاولة التوليد مرة أخرى.');
+      console.error("AI Generation failed:", err);
+      const isHtmlResponse = err.message?.includes('غير صالحة بغير صيغة JSON') || err.message?.includes('DOCTYPE') || err.message?.includes('<html');
+      
+      let finalMessage = err.message || String(err);
+      if (isHtmlResponse) {
+        finalMessage = 'الخادم أرجع صفحة ويب بدلاً من بيانات JSON. هذا يحدث غالباً عند استضافة التطبيق كموقع ساكن (Static Site) على Vercel دون تفعيل الـ API بالكامل. يرجى تفعيل الدوال السحابية (Serverless Functions) وتحميل مجلد /api، والتأكد من تواجد مفتاح الـ API.';
+      }
+      setAiGeneratorError(finalMessage);
     } finally {
       setIsAiGenerating(false);
     }
