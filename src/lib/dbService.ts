@@ -79,29 +79,8 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Prefabricated accounts registry - no self-registration allowed as requested
-export const PRE_CREATED_ACCOUNTS = [
-  {
-    username: 'teacher',
-    password: 'moallim2026',
-    displayName: 'السيد الأستاذ المقتدر',
-    role: UserRole.TEACHER,
-  },
-  {
-    username: 'student5',
-    password: 'primary5',
-    displayName: 'تلميذ(ة) المستوى الخامس ابتدائي',
-    role: UserRole.STUDENT_5,
-    level: '5' as const,
-  },
-  {
-    username: 'student6',
-    password: 'primary6',
-    displayName: 'تلميذ(ة) المستوى السادس ابتدائي',
-    role: UserRole.STUDENT_6,
-    level: '6' as const,
-  }
-];
+// Prefabricated accounts registry - set to empty array under Super Admin System as requested
+export const PRE_CREATED_ACCOUNTS: any[] = [];
 
 // Helper to get local fallback items
 function getLocalItems<T>(key: string): T[] {
@@ -261,19 +240,19 @@ if (!localStorage.getItem('edu_documents')) {
 }
 
 export const DEFAULT_STUDENTS = [
-  { id: 'uid_student5', username: 'student5', displayName: 'تلميذ(ة) المستوى الخامس ابتدائي', level: '5' as const },
-  { id: 'uid_student6', username: 'student6', displayName: 'تلميذ(ة) المستوى السادس ابتدائي', level: '6' as const },
-  { id: 'ahmed5', username: 'ahmed5', displayName: 'أحمد العلمي', level: '5' as const },
-  { id: 'fatima5', username: 'fatima5', displayName: 'فاطمة الزهراء البقالي', level: '5' as const },
-  { id: 'zinab5', username: 'zinab5', displayName: 'زينب الشاوي', level: '5' as const },
-  { id: 'yassine6', username: 'yassine6', displayName: 'ياسين بنجلون', level: '6' as const },
-  { id: 'maryam6', username: 'maryam6', displayName: 'مريم التازي', level: '6' as const },
-  { id: 'omar6', username: 'omar6', displayName: 'عمر الإدريسي', level: '6' as const },
+  { id: 'uid_student5', username: 'student5', displayName: 'تلميذ(ة) المستوى الخامس ابتدائي', level: '5' as const, role: 'student' },
+  { id: 'uid_student6', username: 'student6', displayName: 'تلميذ(ة) المستوى السادس ابتدائي', level: '6' as const, role: 'student' },
+  { id: 'ahmed5', username: 'ahmed5', displayName: 'أحمد العلمي', level: '5' as const, role: 'student' },
+  { id: 'fatima5', username: 'fatima5', displayName: 'فاطمة الزهراء البقالي', level: '5' as const, role: 'student' },
+  { id: 'zinab5', username: 'zinab5', displayName: 'زينب الشاوي', level: '5' as const, role: 'student' },
+  { id: 'yassine6', username: 'yassine6', displayName: 'ياسين بنجلون', level: '6' as const, role: 'student' },
+  { id: 'maryam6', username: 'maryam6', displayName: 'مريم التازي', level: '6' as const, role: 'student' },
+  { id: 'omar6', username: 'omar6', displayName: 'عمر الإدريسي', level: '6' as const, role: 'student' },
 ];
 
 const INITIAL_STUDENT_NOTES = [
-  { id: 'uid_student5', username: 'student5', displayName: 'تلميذ(ة) المستوى الخامس ابتدائي', level: '5', notes: 'أحسنت في الإملاء، حاول التركيز أكثر في التراكيب' },
-  { id: 'uid_student6', username: 'student6', displayName: 'تلميذ(ة) المستوى السادس ابتدائي', level: '6', notes: 'مثابر ومجتهد، ممتاز في الأنشطة الصفية والمنزلية' },
+  { id: 'uid_student5', username: 'student5', displayName: 'تلميذ(ة) المستوى الخامس ابتدائي', level: '5', notes: 'أحسنت في الإملاء، حاول التركيز أكثر في التراكيب', role: 'student' },
+  { id: 'uid_student6', username: 'student6', displayName: 'تلميذ(ة) المستوى السادس ابتدائي', level: '6', notes: 'مثابر ومجتهد، ممتاز في الأنشطة الصفية والمنزلية', role: 'student' },
 ];
 
 if (!localStorage.getItem('edu_student_notes')) {
@@ -283,45 +262,305 @@ if (!localStorage.getItem('edu_student_notes')) {
 // Active dynamic API Service
 export const dbService = {
   
-  // Simulated or authentic login gate
+  getCustomTeacher: (): { username: string; displayName: string; password?: string; role: string } | null => {
+    try {
+      const raw = localStorage.getItem('edu_custom_teacher');
+      return raw ? { ...JSON.parse(raw), role: UserRole.TEACHER } : null;
+    } catch {
+      return null;
+    }
+  },
+
+  saveCustomTeacher: async (displayName: string, username: string, password?: string): Promise<void> => {
+    const info = {
+      username: username.trim().toLowerCase(),
+      displayName: displayName.trim(),
+      password: password ? password.trim() : 'moallim2026',
+      role: UserRole.TEACHER
+    };
+    localStorage.setItem('edu_custom_teacher', JSON.stringify(info));
+
+    if (isFirebaseAvailable) {
+      try {
+        await setDoc(doc(db, 'users', 'custom_teacher'), {
+          ...info,
+          role: UserRole.TEACHER,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.warn("Could not save custom teacher to Firebase:", err);
+      }
+    }
+  },
+
+  // Simulated or authentic login gate (securely verifying roles directly in Firestore)
   login: async (username: string, password: string): Promise<UserSession> => {
-    // Exact credentials checking matching requirements
-    const matched = PRE_CREATED_ACCOUNTS.find(
-      acc => acc.username.toLowerCase() === username.trim().toLowerCase() && acc.password === password
-    );
+    const trimmedUsername = username.trim().toLowerCase();
+
+    // 1. If Firebase is active, we check credentials and roles SECURELY via Firestore query directly
+    if (isFirebaseAvailable) {
+      try {
+        // Auto-seed default superadmin into Firestore if first-time empty login
+        if (trimmedUsername === 'superadmin') {
+          const docRef = doc(db, 'users', 'uid_superadmin');
+          const checkDoc = await getDoc(docRef);
+          if (!checkDoc.exists()) {
+            await setDoc(docRef, {
+              username: 'superadmin',
+              password: 'superadmin2026',
+              displayName: 'المشرف العام للمنصة',
+              role: 'superadmin',
+              createdAt: new Date().toISOString()
+            });
+            console.log("Seeded default superadmin user inside Firestore collection.");
+          }
+        }
+
+        // Query database directly for this exact user
+        const q = query(collection(db, 'users'), where('username', '==', trimmedUsername));
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+          const userDoc = snapshot.docs[0];
+          const userData = userDoc.data();
+          
+          if (userData.password === password) {
+            let userRole: UserRole = UserRole.TEACHER;
+            if (userData.role === 'superadmin' || userData.role === UserRole.SUPERADMIN) {
+              userRole = UserRole.SUPERADMIN;
+            } else if (userData.role === 'teacher' || userData.role === UserRole.TEACHER) {
+              userRole = UserRole.TEACHER;
+            } else if (userData.role === 'student' || userData.role === UserRole.STUDENT_5 || userData.role === UserRole.STUDENT_6) {
+              userRole = userData.level === '6' ? UserRole.STUDENT_6 : UserRole.STUDENT_5;
+            }
+
+            const session: UserSession = {
+              uid: userDoc.id,
+              username: userData.username,
+              role: userRole,
+              displayName: userData.displayName || userData.username,
+              level: userData.level
+            };
+            localStorage.setItem('edu_session', JSON.stringify(session));
+            return session;
+          }
+        }
+      } catch (err) {
+        console.warn("Secure Firebase login check encountered error; attempting local fallback:", err);
+      }
+    }
+
+    // 2. Offline / Local Fallback Mode
+    const localUsers = getLocalItems<any>('edu_users_all');
     
-    if (matched) {
+    // Auto-seed offline store with default superadmin and original fallbacks for local compatibility
+    if (localUsers.length === 0) {
+      localUsers.push(
+        {
+          id: 'uid_superadmin',
+          username: 'superadmin',
+          password: 'superadmin2026',
+          displayName: 'المشرف العام للمنصة',
+          role: 'superadmin'
+        },
+        {
+          id: 'uid_teacher_default',
+          username: 'teacher',
+          password: 'moallim2026',
+          displayName: 'السيد الأستاذ المقتدر',
+          role: 'teacher'
+        }
+      );
+      saveLocalItems('edu_users_all', localUsers);
+    }
+
+    const localMatched = localUsers.find(
+      u => u.username.toLowerCase() === trimmedUsername && u.password === password
+    );
+
+    if (localMatched) {
+      let userRole: UserRole = UserRole.TEACHER;
+      if (localMatched.role === 'superadmin' || localMatched.role === UserRole.SUPERADMIN) {
+        userRole = UserRole.SUPERADMIN;
+      } else if (localMatched.role === 'teacher' || localMatched.role === UserRole.TEACHER) {
+        userRole = UserRole.TEACHER;
+      } else if (localMatched.role === 'student' || localMatched.role === UserRole.STUDENT_5 || localMatched.role === UserRole.STUDENT_6) {
+        userRole = localMatched.level === '6' ? UserRole.STUDENT_6 : UserRole.STUDENT_5;
+      }
+
       const session: UserSession = {
-        uid: `uid_${matched.username}`,
-        username: matched.username,
-        role: matched.role,
-        displayName: matched.displayName,
-        level: matched.level
+        uid: localMatched.id || `uid_${localMatched.username}`,
+        username: localMatched.username,
+        role: userRole,
+        displayName: localMatched.displayName,
+        level: localMatched.level
       };
-      
       localStorage.setItem('edu_session', JSON.stringify(session));
       return session;
     }
 
-    // Try dynamic student accounts!
-    const accounts = await dbService.getStudentAccounts();
-    const dynamicMatched = accounts.find(
-      acc => acc.username.toLowerCase() === username.trim().toLowerCase() && acc.password === password
-    );
+    throw new Error("بيانات الولوج خاطئة أو غير مسجلة في منصتنا مسبقاً.");
+  },
 
-    if (dynamicMatched) {
-      const session: UserSession = {
-        uid: dynamicMatched.id,
-        username: dynamicMatched.username,
-        role: dynamicMatched.level === '5' ? UserRole.STUDENT_5 : UserRole.STUDENT_6,
-        displayName: dynamicMatched.displayName,
-        level: dynamicMatched.level
-      };
-      localStorage.setItem('edu_session', JSON.stringify(session));
-      return session;
+  // Super Admin API: Fetch all user accounts
+  getAllUsers: async (): Promise<any[]> => {
+    const logPath = 'users';
+    let firebaseUsers: any[] = [];
+    if (isFirebaseAvailable) {
+      try {
+        const snapshot = await getDocs(collection(db, logPath));
+        firebaseUsers = snapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          let derivedRole = data.role || 'student';
+          if (data.username === 'superadmin') derivedRole = 'superadmin';
+          if (data.username === 'teacher') derivedRole = 'teacher';
+          return {
+            id: docSnap.id,
+            role: derivedRole,
+            ...data
+          };
+        });
+        // Cache to local storage
+        saveLocalItems('edu_users_all', firebaseUsers);
+        return firebaseUsers;
+      } catch (error) {
+        console.warn("Firestore error in getAllUsers fallback to local:", error);
+      }
     }
     
-    throw new Error("بيانات الولوج خاطئة أو غير مسجلة في النظام مسبقاً.");
+    // Fallback seed if local storage user list is completely empty
+    const local = getLocalItems<any>('edu_users_all');
+    if (local.length === 0) {
+      const defaultList = [
+        {
+          id: 'uid_superadmin',
+          username: 'superadmin',
+          password: 'superadmin2026',
+          displayName: 'المشرف العام للمنصة',
+          role: 'superadmin'
+        }
+      ];
+      saveLocalItems('edu_users_all', defaultList);
+      return defaultList;
+    }
+    return local.map(u => ({
+      role: u.role || (u.username === 'superadmin' ? 'superadmin' : u.username === 'teacher' ? 'teacher' : 'student'),
+      ...u
+    }));
+  },
+
+  // Super Admin API: Save or modify user details (Create teacher, student, admin, or modify password)
+  saveUserAccount: async (user: { id?: string; username: string; displayName: string; role: 'superadmin' | 'teacher' | 'student'; level?: '5' | '6'; password: string }): Promise<void> => {
+    const uid = user.id || `uid_${user.username.trim().toLowerCase()}`;
+    const logPath = `users/${uid}`;
+    
+    const payload = {
+      username: user.username.trim().toLowerCase(),
+      displayName: user.displayName.trim(),
+      role: user.role,
+      level: user.level || '5',
+      password: user.password.trim(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    if (isFirebaseAvailable) {
+      try {
+        await setDoc(doc(db, 'users', uid), payload, { merge: true });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, logPath);
+      }
+    }
+
+    // Sync to unified local storage
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const existingIndex = localUsers.findIndex(u => u.id === uid || u.username === payload.username);
+    if (existingIndex !== -1) {
+      localUsers[existingIndex] = { id: uid, ...payload };
+    } else {
+      localUsers.push({ id: uid, ...payload });
+    }
+    saveLocalItems('edu_users_all', localUsers);
+
+    // Backward compatibility sync with existing student list if student
+    if (user.role === 'student') {
+      const localStudentAccounts = getLocalItems<any>('edu_student_accounts');
+      const idx = localStudentAccounts.findIndex(u => u.id === uid);
+      const studPayload = {
+        id: uid,
+        username: user.username.trim().toLowerCase(),
+        displayName: user.displayName.trim(),
+        level: user.level || '5',
+        password: user.password.trim(),
+        notes: '',
+        role: 'student',
+        createdAt: new Date().toISOString()
+      };
+      if (idx !== -1) {
+        localStudentAccounts[idx] = studPayload;
+      } else {
+        localStudentAccounts.push(studPayload);
+      }
+      saveLocalItems('edu_student_accounts', localStudentAccounts);
+    }
+  },
+
+  // SUPER ADMIN API: Update password of any other user directly
+  updateUserPassword: async (userId: string, newPassword: string): Promise<void> => {
+    const logPath = `users/${userId}`;
+    const trimmedPassword = newPassword.trim();
+    if (!trimmedPassword) {
+      throw new Error("كلمة المرور الجديدة لا يمكن أن تكون فارغة.");
+    }
+
+    if (isFirebaseAvailable) {
+      try {
+        await setDoc(doc(db, 'users', userId), {
+          password: trimmedPassword,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, logPath);
+      }
+    }
+
+    // Update in local storage ('edu_users_all')
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const userIndex = localUsers.findIndex(u => u.id === userId);
+    if (userIndex !== -1) {
+      localUsers[userIndex].password = trimmedPassword;
+      localUsers[userIndex].updatedAt = new Date().toISOString();
+      saveLocalItems('edu_users_all', localUsers);
+    }
+
+    // Also sync in local student accounts if it is a student
+    const localStudentAccounts = getLocalItems<any>('edu_student_accounts');
+    const studIndex = localStudentAccounts.findIndex(u => u.id === userId);
+    if (studIndex !== -1) {
+      localStudentAccounts[studIndex].password = trimmedPassword;
+      saveLocalItems('edu_student_accounts', localStudentAccounts);
+    }
+  },
+
+  // Super Admin API: Remove a user
+  deleteUserAccount: async (uid: string): Promise<void> => {
+    const logPath = `users/${uid}`;
+    if (isFirebaseAvailable) {
+      try {
+        await deleteDoc(doc(db, 'users', uid));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, logPath);
+      }
+    }
+
+    // Sync local
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const updatedUsers = localUsers.filter(u => u.id !== uid);
+    saveLocalItems('edu_users_all', updatedUsers);
+
+    // Backward compatibility sync
+    const localStudentAccounts = getLocalItems<any>('edu_student_accounts');
+    const updatedStuds = localStudentAccounts.filter(acc => acc.id !== uid);
+    saveLocalItems('edu_student_accounts', updatedStuds);
   },
 
   getCurrentSession: (): UserSession | null => {
@@ -340,6 +579,7 @@ export const dbService = {
   // 1. Core Exercise Handlers (WITH LEVEL SEGREGATION & COMPLIANT FILTERING)
   getExercises: async (level?: '5' | '6'): Promise<Exercise[]> => {
     const logPath = 'exercises';
+    let firebaseExercises: Exercise[] = [];
     if (isFirebaseAvailable) {
       try {
         let q;
@@ -349,7 +589,13 @@ export const dbService = {
           q = query(collection(db, logPath), orderBy('createdAt', 'desc'));
         }
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Exercise));
+        firebaseExercises = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Exercise));
+        
+        const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+        if (isHideDemo) {
+          firebaseExercises = firebaseExercises.filter(ex => !['ex1', 'ex2', 'ex3', 'ex4'].includes(ex.id) && ex.authorId !== 'system_teacher');
+        }
+        return firebaseExercises;
       } catch (error) {
         handleFirestoreError(error, OperationType.LIST, logPath);
       }
@@ -358,10 +604,16 @@ export const dbService = {
     // Fallback with exact segregation of levels
     const local = getLocalItems<Exercise>('edu_exercises');
     const sorted = local.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+    const filteredSeed = isHideDemo 
+      ? sorted.filter(ex => !['ex1', 'ex2', 'ex3', 'ex4'].includes(ex.id) && ex.authorId !== 'system_teacher')
+      : sorted;
+
     if (level) {
-      return sorted.filter(ex => ex.level === level);
+      return filteredSeed.filter(ex => ex.level === level);
     }
-    return sorted;
+    return filteredSeed;
   },
 
   addExercise: async (text: string, level: '5' | '6', category: 'تمرين' | 'فرض' | 'مراقبة مستمرة', authorId: string): Promise<Exercise> => {
@@ -412,6 +664,7 @@ export const dbService = {
   // 2. Score/Assessment Handlers (WITH LEVEL SEGREGATION & STRICT REVIEWS)
   getScores: async (level?: '5' | '6'): Promise<Score[]> => {
     const logPath = 'scores';
+    let firebaseScores: Score[] = [];
     if (isFirebaseAvailable) {
       try {
         let q;
@@ -421,7 +674,13 @@ export const dbService = {
           q = query(collection(db, logPath), orderBy('createdAt', 'desc'));
         }
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Score));
+        firebaseScores = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Score));
+
+        const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+        if (isHideDemo) {
+          firebaseScores = firebaseScores.filter(sc => !['sc1', 'sc2', 'sc3', 'sc4'].includes(sc.id));
+        }
+        return firebaseScores;
       } catch (error) {
         handleFirestoreError(error, OperationType.LIST, logPath);
       }
@@ -429,13 +688,19 @@ export const dbService = {
 
     const local = getLocalItems<Score>('edu_scores');
     const sorted = local.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+    const filteredSeed = isHideDemo 
+      ? sorted.filter(sc => !['sc1', 'sc2', 'sc3', 'sc4'].includes(sc.id))
+      : sorted;
+
     if (level) {
-      return sorted.filter(sc => sc.level === level);
+      return filteredSeed.filter(sc => sc.level === level);
     }
-    return sorted;
+    return filteredSeed;
   },
 
-  addScore: async (studentName: string, level: '5' | '6', subject: string, scoreValue: string, scoreType: 'نقطة المراقبة المستمرة' | 'الفرض'): Promise<Score> => {
+  addScore: async (studentName: string, level: '5' | '6', subject: string, scoreValue: string, scoreType: 'نقطة المراقبة مستمرة' | 'الفرض'): Promise<Score> => {
     const logPath = 'scores';
     const newScore: Omit<Score, 'id'> = {
       studentName: studentName.trim(),
@@ -484,6 +749,7 @@ export const dbService = {
   // 3. Absence Registry Handlers (WITH SECURE ACCESS & HIGH PEDAGOGICAL TONE)
   getAbsences: async (level?: '5' | '6'): Promise<Absence[]> => {
     const logPath = 'absences';
+    let firebaseAbsences: Absence[] = [];
     if (isFirebaseAvailable) {
       try {
         let q;
@@ -493,7 +759,13 @@ export const dbService = {
           q = query(collection(db, logPath), orderBy('createdAt', 'desc'));
         }
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Absence));
+        firebaseAbsences = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Absence));
+        
+        const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+        if (isHideDemo) {
+          firebaseAbsences = firebaseAbsences.filter(ab => !['ab1', 'ab2'].includes(ab.id));
+        }
+        return firebaseAbsences;
       } catch (error) {
         handleFirestoreError(error, OperationType.LIST, logPath);
       }
@@ -501,10 +773,16 @@ export const dbService = {
 
     const local = getLocalItems<Absence>('edu_absences');
     const sorted = local.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+    const filteredSeed = isHideDemo 
+      ? sorted.filter(ab => !['ab1', 'ab2'].includes(ab.id))
+      : sorted;
+
     if (level) {
-      return sorted.filter(ab => ab.level === level);
+      return filteredSeed.filter(ab => ab.level === level);
     }
-    return sorted;
+    return filteredSeed;
   },
 
   addAbsence: async (studentName: string, level: '5' | '6', date: string, absenceType: 'غياب مبرر' | 'غياب غير مبرر'): Promise<Absence> => {
@@ -555,6 +833,7 @@ export const dbService = {
   // 4. Pedagogical Document Handlers (WITH LEVEL SEGREGATION & STORAGE SYNC)
   getDocuments: async (level?: '5' | '6'): Promise<EduDocument[]> => {
     const logPath = 'documents';
+    let firebaseDocuments: EduDocument[] = [];
     if (isFirebaseAvailable) {
       try {
         let q;
@@ -564,7 +843,13 @@ export const dbService = {
           q = query(collection(db, logPath), orderBy('createdAt', 'desc'));
         }
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as EduDocument));
+        firebaseDocuments = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as EduDocument));
+        
+        const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+        if (isHideDemo) {
+          firebaseDocuments = firebaseDocuments.filter(docItem => !['doc1', 'doc2', 'doc3'].includes(docItem.id) && docItem.authorId !== 'system_teacher');
+        }
+        return firebaseDocuments;
       } catch (error) {
         handleFirestoreError(error, OperationType.LIST, logPath);
       }
@@ -572,10 +857,16 @@ export const dbService = {
 
     const local = getLocalItems<EduDocument>('edu_documents');
     const sorted = local.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+    const filteredSeed = isHideDemo 
+      ? sorted.filter(docItem => !['doc1', 'doc2', 'doc3'].includes(docItem.id) && docItem.authorId !== 'system_teacher')
+      : sorted;
+
     if (level) {
-      return sorted.filter(docItem => docItem.level === level);
+      return filteredSeed.filter(docItem => docItem.level === level);
     }
-    return sorted;
+    return filteredSeed;
   },
 
   addDocument: async (name: string, level: '5' | '6', fileType: string, fileUrl: string, authorId: string): Promise<EduDocument> => {
@@ -682,20 +973,22 @@ export const dbService = {
   },
 
   // 5. Personal Student Notes Handlers (with dynamic Firebase storage & Local Fallback)
-  getStudentNotes: async (level?: '5' | '6'): Promise<{ id: string; username: string; displayName: string; level: '5' | '6'; notes: string }[]> => {
+  getStudentNotes: async (level?: '5' | '6'): Promise<{ id: string; username: string; displayName: string; level: '5' | '6'; notes: string; role?: string }[]> => {
     const list = await dbService.getStudentAccounts(level);
     const localNotes = getLocalItems<any>('edu_student_notes');
 
     return list.map(acc => {
       // prioritize notes stored dynamically on user object
       const userNotes = (acc as any).notes;
+      const role = acc.role || 'student';
       if (userNotes !== undefined) {
         return {
           id: acc.id,
           username: acc.username,
           displayName: acc.displayName,
           level: acc.level,
-          notes: userNotes || ''
+          notes: userNotes || '',
+          role
         };
       }
       const noteMatch = localNotes.find((ln: any) => ln.id === acc.id);
@@ -704,7 +997,8 @@ export const dbService = {
         username: acc.username,
         displayName: acc.displayName,
         level: acc.level,
-        notes: noteMatch ? noteMatch.notes : ''
+        notes: noteMatch ? noteMatch.notes : '',
+        role
       };
     });
   },
@@ -734,6 +1028,11 @@ export const dbService = {
       return match.notes || "";
     }
     
+    const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+    if (isHideDemo) {
+      return "";
+    }
+
     // Try Default matching if no note written yet
     const defMatch = INITIAL_STUDENT_NOTES.find(n => n.id === uid);
     return defMatch ? defMatch.notes : "";
@@ -769,7 +1068,7 @@ export const dbService = {
   },
 
   // 6. Dynamic Student Account Management Handlers
-  getStudentAccounts: async (level?: '5' | '6'): Promise<{ id: string; username: string; displayName: string; level: '5' | '6'; password?: string; notes?: string }[]> => {
+  getStudentAccounts: async (level?: '5' | '6'): Promise<{ id: string; username: string; displayName: string; level: '5' | '6'; password?: string; notes?: string; role?: string }[]> => {
     const logPath = 'users';
     let firebaseUsers: any[] = [];
     
@@ -796,25 +1095,29 @@ export const dbService = {
 
     // Default built-in seed accounts for displaying & logging
     const seedAccounts = [
-      { id: 'uid_student5', username: 'student5', displayName: 'تلميذ(ة) المستوى الخامس ابتدائي', level: '5' as const, password: 'primary5' },
-      { id: 'uid_student6', username: 'student6', displayName: 'تلميذ(ة) المستوى السادس ابتدائي', level: '6' as const, password: 'primary6' },
-      { id: 'uid_ahmed5', username: 'ahmed5', displayName: 'أحمد العلمي', level: '5' as const, password: 'primary5' },
-      { id: 'uid_fatima5', username: 'fatima5', displayName: 'فاطمة الزهراء البقالي', level: '5' as const, password: 'primary5' },
-      { id: 'uid_zinab5', username: 'zinab5', displayName: 'زينب الشاوي', level: '5' as const, password: 'primary5' },
-      { id: 'uid_yassine6', username: 'yassine6', displayName: 'ياسين بنجلون', level: '6' as const, password: 'primary6' },
-      { id: 'uid_maryam6', username: 'maryam6', displayName: 'مريم التازي', level: '6' as const, password: 'primary6' },
-      { id: 'uid_omar6', username: 'omar6', displayName: 'عمر الإدريسي', level: '6' as const, password: 'primary6' },
+      { id: 'uid_student5', username: 'student5', displayName: 'تلميذ(ة) المستوى الخامس ابتدائي', level: '5' as const, password: 'primary5', role: 'student' },
+      { id: 'uid_student6', username: 'student6', displayName: 'تلميذ(ة) المستوى السادس ابتدائي', level: '6' as const, password: 'primary6', role: 'student' },
+      { id: 'uid_ahmed5', username: 'ahmed5', displayName: 'أحمد العلمي', level: '5' as const, password: 'primary5', role: 'student' },
+      { id: 'uid_fatima5', username: 'fatima5', displayName: 'فاطمة الزهراء البقالي', level: '5' as const, password: 'primary5', role: 'student' },
+      { id: 'uid_zinab5', username: 'zinab5', displayName: 'زينب الشاوي', level: '5' as const, password: 'primary5', role: 'student' },
+      { id: 'uid_yassine6', username: 'yassine6', displayName: 'ياسين بنجلون', level: '6' as const, password: 'primary6', role: 'student' },
+      { id: 'uid_maryam6', username: 'maryam6', displayName: 'مريم التازي', level: '6' as const, password: 'primary6', role: 'student' },
+      { id: 'uid_omar6', username: 'omar6', displayName: 'عمر الإدريسي', level: '6' as const, password: 'primary6', role: 'student' },
     ];
 
     const localAccounts = getLocalItems<any>('edu_student_accounts');
     const allAccountsMap = new Map<string, any>();
     
-    // Add seed accounts first, then local, then override with firebase values
-    seedAccounts.forEach(acc => allAccountsMap.set(acc.id, acc));
-    localAccounts.forEach(acc => allAccountsMap.set(acc.id, acc));
+    // Add seed accounts first (if demo is not hidden), then local, then override with firebase values
+    const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+    if (!isHideDemo) {
+      seedAccounts.forEach(acc => allAccountsMap.set(acc.id, acc));
+    }
+    
+    localAccounts.forEach(acc => allAccountsMap.set(acc.id, { role: 'student', ...acc }));
 
     firebaseUsers.forEach(fUser => {
-      if (fUser.role !== UserRole.TEACHER && fUser.username !== 'teacher') {
+      if (fUser.role !== UserRole.TEACHER && fUser.username !== 'teacher' && fUser.username !== 'custom_teacher' && fUser.id !== 'custom_teacher') {
         const username = fUser.username || fUser.id.replace('uid_', '');
         allAccountsMap.set(fUser.id || `uid_${username}`, {
           id: fUser.id || `uid_${username}`,
@@ -823,6 +1126,7 @@ export const dbService = {
           level: fUser.level || '5',
           password: fUser.password || '123456',
           notes: fUser.notes || '',
+          role: fUser.role || 'student',
           ...(fUser as any)
         });
       }
@@ -845,6 +1149,7 @@ export const dbService = {
       level,
       password: password.trim(),
       notes: '',
+      role: 'student',
       createdAt: new Date().toISOString()
     };
 
@@ -871,7 +1176,7 @@ export const dbService = {
     const localNotes = getLocalItems<any>('edu_student_notes');
     const existingNoteIndex = localNotes.findIndex(n => n.id === uid);
     if (existingNoteIndex === -1) {
-      localNotes.push({ id: uid, username: username.trim(), displayName: displayName.trim(), level, notes: '' });
+      localNotes.push({ id: uid, username: username.trim(), displayName: displayName.trim(), level, notes: '', role: 'student' });
       saveLocalItems('edu_student_notes', localNotes);
     }
 
