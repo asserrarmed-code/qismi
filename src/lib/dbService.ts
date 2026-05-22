@@ -374,9 +374,27 @@ export const dbService = {
       saveLocalItems('edu_users_all', localUsers);
     }
 
-    const localMatched = localUsers.find(
+    let localMatched = localUsers.find(
       u => u.username.toLowerCase() === trimmedUsername && u.password === password
     );
+
+    // Dynamic support for students who were saved in edu_student_accounts but not synced to edu_users_all yet
+    if (!localMatched) {
+      const localStudents = getLocalItems<any>('edu_student_accounts');
+      const studentMatched = localStudents.find(
+        u => u.username.toLowerCase() === trimmedUsername && u.password === password
+      );
+      if (studentMatched) {
+        localMatched = {
+          id: studentMatched.id,
+          username: studentMatched.username,
+          password: studentMatched.password,
+          displayName: studentMatched.displayName,
+          role: 'student',
+          level: studentMatched.level
+        };
+      }
+    }
 
     if (localMatched) {
       let userRole: UserRole = UserRole.TEACHER;
@@ -420,9 +438,21 @@ export const dbService = {
             ...data
           };
         });
-        // Cache to local storage
-        saveLocalItems('edu_users_all', firebaseUsers);
-        return firebaseUsers;
+        
+        // Safely cache to local storage by MERGING rather than overwriting completely, protecting local creations
+        if (firebaseUsers.length > 0) {
+          const localUsers = getLocalItems<any>('edu_users_all');
+          firebaseUsers.forEach(fUser => {
+            const idx = localUsers.findIndex(u => u.id === fUser.id || u.username === fUser.username);
+            if (idx !== -1) {
+              localUsers[idx] = { ...localUsers[idx], ...fUser };
+            } else {
+              localUsers.push(fUser);
+            }
+          });
+          saveLocalItems('edu_users_all', localUsers);
+        }
+        return firebaseUsers.length > 0 ? firebaseUsers : getLocalItems<any>('edu_users_all');
       } catch (error) {
         console.warn("Firestore error in getAllUsers fallback to local:", error);
       }
@@ -1172,6 +1202,16 @@ export const dbService = {
     }
     saveLocalItems('edu_student_accounts', localAccounts);
 
+    // Sync to legacy/unified local storage for authentication access fallback
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const existingUserIndex = localUsers.findIndex(u => u.id === uid || u.username === payload.username);
+    if (existingUserIndex !== -1) {
+      localUsers[existingUserIndex] = { id: uid, ...payload };
+    } else {
+      localUsers.push({ id: uid, ...payload });
+    }
+    saveLocalItems('edu_users_all', localUsers);
+
     // Sync to local notes storage
     const localNotes = getLocalItems<any>('edu_student_notes');
     const existingNoteIndex = localNotes.findIndex(n => n.id === uid);
@@ -1197,6 +1237,11 @@ export const dbService = {
     const localAccounts = getLocalItems<any>('edu_student_accounts');
     const updatedAccounts = localAccounts.filter((acc: any) => acc.id !== uid);
     saveLocalItems('edu_student_accounts', updatedAccounts);
+
+    // Sync local unified user list
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const updatedUsers = localUsers.filter((u: any) => u.id !== uid);
+    saveLocalItems('edu_users_all', updatedUsers);
 
     // Sync local notes
     const localNotes = getLocalItems<any>('edu_student_notes');

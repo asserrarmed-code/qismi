@@ -58,6 +58,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   const [aiLevel, setAiLevel] = useState<'5' | '6'>('5');
   const [aiComponent, setAiComponent] = useState<'التراكيب' | 'الصرف والتحويل' | 'الإملاء'>('التراكيب');
   const [aiLessonName, setAiLessonName] = useState('');
+  const [aiQuestionCount, setAiQuestionCount] = useState<number>(1);
+  const [aiGeneratedQuestions, setAiGeneratedQuestions] = useState<{question: string; correctAnswer: string; wrongAnswer1: string; wrongAnswer2: string}[]>([]);
   const [aiGeneratedQuestion, setAiGeneratedQuestion] = useState('');
   const [aiCorrectAnswer, setAiCorrectAnswer] = useState('');
   const [aiWrongAnswer1, setAiWrongAnswer1] = useState('');
@@ -595,6 +597,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     setAiGeneratorError(null);
     setAiGeneratorSuccess(null);
     setShowAiPreview(false);
+    setAiGeneratedQuestions([]);
 
     if (!aiLessonName.trim()) {
       setAiGeneratorError('يرجى أولاً كتابة اسم الدرس المستهدف لتوليد السؤال.');
@@ -611,7 +614,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
         body: JSON.stringify({
           level: aiLevel,
           component: aiComponent,
-          lessonName: aiLessonName.trim()
+          lessonName: aiLessonName.trim(),
+          count: aiQuestionCount
         })
       });
 
@@ -638,13 +642,10 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
 
       const resData = await response.json();
 
-      if (resData.success && resData.data) {
-        setAiGeneratedQuestion(resData.data.question || '');
-        setAiCorrectAnswer(resData.data.correctAnswer || '');
-        setAiWrongAnswer1(resData.data.wrongAnswer1 || '');
-        setAiWrongAnswer2(resData.data.wrongAnswer2 || '');
+      if (resData.success && resData.data && Array.isArray(resData.data)) {
+        setAiGeneratedQuestions(resData.data);
         setShowAiPreview(true);
-        setAiGeneratorSuccess('تم توليد السؤال بنجاح! راجع خياراته بدقة وعدلها إن لزم الأمر ثم اضغط نشر.');
+        setAiGeneratorSuccess(`تم بنجاح صياغة ${resData.data.length} أسئلة تفاعلية! قم بمراجعتها وتدقيق خياراتها ثم اختر نشرها.`);
       } else {
         throw new Error('الاستجابة المستلمة من السيرفر غير مطابقة للتعليمات البنيوية.');
       }
@@ -659,6 +660,89 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       setAiGeneratorError(finalMessage);
     } finally {
       setIsAiGenerating(false);
+    }
+  };
+
+  const handleEditAiQuestionField = (index: number, field: 'question' | 'correctAnswer' | 'wrongAnswer1' | 'wrongAnswer2', value: string) => {
+    setAiGeneratedQuestions(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handlePublishSingleAiQuestion = async (index: number) => {
+    setAiGeneratorError(null);
+    setAiGeneratorSuccess(null);
+
+    const qItem = aiGeneratedQuestions[index];
+    if (!qItem) return;
+
+    if (!qItem.question.trim() || !qItem.correctAnswer.trim() || !qItem.wrongAnswer1.trim() || !qItem.wrongAnswer2.trim()) {
+      setAiGeneratorError('يرجى التأكد من ملء نص السؤال وجميع الخيارات المقترحة أولاً.');
+      return;
+    }
+
+    try {
+      const formattedText = `سؤال تفاعلي ذكي 🤖✨
+المكون: ${aiComponent}
+الدرس: ${aiLessonName.trim()}
+
+السؤال: ${qItem.question.trim()}
+
+✔️ الجواب الصحيح: ${qItem.correctAnswer.trim()}
+❌ خيار خاطئ أول: ${qItem.wrongAnswer1.trim()}
+❌ خيار خاطئ ثان: ${qItem.wrongAnswer2.trim()}`;
+
+      const added = await dbService.addExercise(formattedText, aiLevel, 'تمرين', session.uid);
+      setExercises(prev => [added, ...prev]);
+
+      // Remove the successfully published item from current generated list
+      setAiGeneratedQuestions(prev => prev.filter((_, idx) => idx !== index));
+      
+      setAiGeneratorSuccess('تم حفظ ونشر السؤال التفاعلي المختار وتوجيهه فوراً للصف المستهدف.');
+      setTimeout(() => setAiGeneratorSuccess(null), 5000);
+    } catch (err: any) {
+      setAiGeneratorError('فشلت عملية النشر على السيرفر: ' + err.message);
+    }
+  };
+
+  const handlePublishAllAiQuestions = async () => {
+    setAiGeneratorError(null);
+    setAiGeneratorSuccess(null);
+
+    if (aiGeneratedQuestions.length === 0) return;
+
+    let successCount = 0;
+    try {
+      for (const qItem of aiGeneratedQuestions) {
+        if (!qItem.question.trim() || !qItem.correctAnswer.trim() || !qItem.wrongAnswer1.trim() || !qItem.wrongAnswer2.trim()) {
+          continue;
+        }
+
+        const formattedText = `سؤال تفاعلي ذكي 🤖✨
+المكون: ${aiComponent}
+الدرس: ${aiLessonName.trim()}
+
+السؤال: ${qItem.question.trim()}
+
+✔️ الجواب الصحيح: ${qItem.correctAnswer.trim()}
+❌ خيار خاطئ أول: ${qItem.wrongAnswer1.trim()}
+❌ خيار خاطئ ثان: ${qItem.wrongAnswer2.trim()}`;
+
+        const added = await dbService.addExercise(formattedText, aiLevel, 'تمرين', session.uid);
+        setExercises(prev => [added, ...prev]);
+        successCount++;
+      }
+
+      setAiGeneratedQuestions([]);
+      setShowAiPreview(false);
+      setAiLessonName('');
+
+      setAiGeneratorSuccess(`تم بنجاح نشر وتوجيه جميع الأسئلة التفاعلية (${successCount} أسئلة) إلى قاعدة البيانات وتوجيهها للصف بنجاح!`);
+      setTimeout(() => setAiGeneratorSuccess(null), 5000);
+    } catch (err: any) {
+      setAiGeneratorError('فشلت عملية النشر الجماعي: ' + err.message);
     }
   };
 
@@ -1199,6 +1283,24 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     />
                   </div>
 
+                  {/* Questions count selector */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-extrabold text-indigo-900">
+                      عدد الأسئلة التفاعلية المراد صياغتها:
+                    </label>
+                    <select
+                      className="w-full px-4 py-3 bg-white border border-slate-205 rounded-2xl focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/40 text-xs font-bold text-slate-800 transition-all duration-200 cursor-pointer"
+                      value={aiQuestionCount}
+                      onChange={(e: any) => setAiQuestionCount(parseInt(e.target.value) || 1)}
+                    >
+                      <option value="1">1️⃣ سؤال تفاعلي واحد فقط</option>
+                      <option value="2">2️⃣ سؤالين تفاعليين (2)</option>
+                      <option value="3">3️⃣ ثلاثة أسئلة تعليمية (3)</option>
+                      <option value="4">4️⃣ أربعة أسئلة تعليمية (4)</option>
+                      <option value="5">5️⃣ باقة كاملة من 5 أسئلة (5)</option>
+                    </select>
+                  </div>
+
                   <button
                     type="submit"
                     disabled={isAiGenerating}
@@ -1206,80 +1308,110 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                   >
                     {isAiGenerating ? (
                       <>
-                        <div className="h-4 h-4 w-4 border-2 border-t-white border-white/30 rounded-full animate-spin" />
-                        <span>جاري صياغة وتوليد سؤال ذكي...</span>
+                        <div className="h-4 w-4 border-2 border-t-white border-white/30 rounded-full animate-spin" />
+                        <span>جاري صياغة وتوليد {aiQuestionCount} أسئلة ذكية...</span>
                       </>
                     ) : (
                       <>
                         <Sparkles className="h-4 w-4 text-amber-300" />
-                        <span>توليد سؤال ذكي (Gemini ✨)</span>
+                        <span>توليد الأسئلة بـ (Gemini ✨)</span>
                       </>
                     )}
                   </button>
                 </form>
 
                 {/* AI Question preview & editor */}
-                {showAiPreview && (
+                {showAiPreview && aiGeneratedQuestions.length > 0 && (
                   <motion.div 
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="mt-6 pt-5 border-t-2 border-dashed border-indigo-100 space-y-4"
+                    className="mt-6 pt-5 border-t-2 border-dashed border-indigo-100 space-y-5"
                   >
-                    <div className="bg-indigo-50/30 p-3 rounded-2xl border border-indigo-100/50 text-center">
-                      <span className="text-[10px] font-black text-indigo-700">مراجعة وتدقيق معطيات السؤال والخيارات قبل النشر</span>
+                    <div className="bg-indigo-50/50 p-3.5 rounded-2xl border border-indigo-100/50 text-center">
+                      <span className="text-[10px] font-black text-indigo-700 block">مراجعة الأسئلة وتدقيق خياراتها قبل النشر</span>
+                      <span className="text-[9px] text-indigo-550 block mt-0.5">يمكنك تغيير وصقل أي قيمة أو نص مباشرة من الخانات أدناه</span>
                     </div>
 
-                    <div className="space-y-3.5">
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-extrabold text-indigo-950">السؤال المولد:</label>
-                        <textarea
-                          rows={3}
-                          className="w-full px-3.5 py-2.5 bg-white border border-indigo-100 rounded-xl focus:outline-none focus:border-indigo-455 text-xs font-semibold text-slate-800"
-                          value={aiGeneratedQuestion}
-                          onChange={(e) => setAiGeneratedQuestion(e.target.value)}
-                        />
-                      </div>
+                    <div className="space-y-6">
+                      {aiGeneratedQuestions.map((qItem, idx) => (
+                        <div key={idx} className="bg-slate-50/50 rounded-2xl p-4 border border-slate-200 relative space-y-3.5">
+                          <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                            <span className="text-[11px] font-black text-indigo-900 bg-indigo-50 px-2.5 py-1 rounded-lg">السؤال المولد رقم {idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => setAiGeneratedQuestions(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-[9px] text-red-600 hover:text-red-800 font-bold bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-all"
+                            >
+                              إلغاء هذا السؤال ✕
+                            </button>
+                          </div>
 
-                      <div className="grid grid-cols-1 gap-3">
-                        <div className="space-y-1">
-                          <label className="block text-[10px] font-extrabold text-emerald-700">✔️ الجواب الصحيح المعتمد:</label>
-                          <input
-                            type="text"
-                            className="w-full px-3.5 py-2 bg-white border border-emerald-100 rounded-xl focus:outline-none focus:border-emerald-450 text-xs font-black text-emerald-900 border-r-4 border-r-emerald-500 shadow-sm"
-                            value={aiCorrectAnswer}
-                            onChange={(e) => setAiCorrectAnswer(e.target.value)}
-                          />
+                          <div className="space-y-3">
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-extrabold text-indigo-950">نص المضمون:</label>
+                              <textarea
+                                rows={2}
+                                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-400 text-xs font-semibold text-slate-800"
+                                value={qItem.question}
+                                onChange={(e) => handleEditAiQuestionField(idx, 'question', e.target.value)}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-2.5">
+                              <div className="space-y-0.5">
+                                <label className="block text-[9px] font-extrabold text-emerald-700">✔️ الخيار الصحيح المعوّل عليه:</label>
+                                <input
+                                  type="text"
+                                  className="w-full px-3 py-1.5 bg-white border border-emerald-100 rounded-xl focus:outline-none focus:border-emerald-400 text-xs font-bold text-emerald-900 border-r-4 border-r-emerald-500 shadow-sm"
+                                  value={qItem.correctAnswer}
+                                  onChange={(e) => handleEditAiQuestionField(idx, 'correctAnswer', e.target.value)}
+                                />
+                              </div>
+
+                              <div className="space-y-0.5">
+                                <label className="block text-[9px] font-extrabold text-rose-700">❌ خيار خاطئ مقترح أول:</label>
+                                <input
+                                  type="text"
+                                  className="w-full px-3 py-1.5 bg-white border border-rose-100 rounded-xl focus:outline-none focus:border-rose-400 text-xs font-semibold text-slate-800 border-r-4 border-r-rose-450"
+                                  value={qItem.wrongAnswer1}
+                                  onChange={(e) => handleEditAiQuestionField(idx, 'wrongAnswer1', e.target.value)}
+                                />
+                              </div>
+
+                              <div className="space-y-0.5">
+                                <label className="block text-[9px] font-extrabold text-rose-700">❌ خيار خاطئ مقترح ثان:</label>
+                                <input
+                                  type="text"
+                                  className="w-full px-3 py-1.5 bg-white border border-rose-100 rounded-xl focus:outline-none focus:border-rose-400 text-xs font-semibold text-slate-800 border-r-4 border-r-rose-455"
+                                  value={qItem.wrongAnswer2}
+                                  onChange={(e) => handleEditAiQuestionField(idx, 'wrongAnswer2', e.target.value)}
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handlePublishSingleAiQuestion(idx)}
+                              className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200/50 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
+                            >
+                              <Plus className="h-4 w-4" />
+                              <span>نشر هذا السؤال فقط 🚀</span>
+                            </button>
+                          </div>
                         </div>
+                      ))}
+                    </div>
 
-                        <div className="space-y-1">
-                          <label className="block text-[10px] font-extrabold text-rose-700">❌ خيار خاطئ مقترح أول:</label>
-                          <input
-                            type="text"
-                            className="w-full px-3.5 py-2 bg-white border border-rose-100 rounded-xl focus:outline-none focus:border-rose-455 text-xs font-semibold text-slate-850 border-r-4 border-r-rose-400"
-                            value={aiWrongAnswer1}
-                            onChange={(e) => setAiWrongAnswer1(e.target.value)}
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="block text-[10px] font-extrabold text-rose-700">❌ خيار خاطئ مقترح ثان:</label>
-                          <input
-                            type="text"
-                            className="w-full px-3.5 py-2 bg-white border border-rose-100 rounded-xl focus:outline-none focus:border-rose-455 text-xs font-semibold text-slate-850 border-r-4 border-r-rose-400"
-                            value={aiWrongAnswer2}
-                            onChange={(e) => setAiWrongAnswer2(e.target.value)}
-                          />
-                        </div>
-                      </div>
-
+                    {aiGeneratedQuestions.length > 1 && (
                       <button
-                        onClick={handlePublishAiQuestion}
-                        className="w-full py-3 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-650 text-white text-xs font-bold rounded-2xl shadow-md shadow-emerald-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+                        type="button"
+                        onClick={handlePublishAllAiQuestions}
+                        className="w-full py-3.5 bg-gradient-to-r from-emerald-450 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white text-xs font-extrabold rounded-2xl shadow-lg shadow-emerald-100 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-250 cursor-pointer flex items-center justify-center gap-2 active:scale-97"
                       >
                         <Plus className="h-4 w-4" />
-                        <span>نشر وتوجيه السؤال لغرفة القسم 🚀</span>
+                        <span>بنقرة واحدة: نشر جميع الأسئلة الـ ({aiGeneratedQuestions.length}) معاً 🎉</span>
                       </button>
-                    </div>
+                    )}
                   </motion.div>
                 )}
               </div>

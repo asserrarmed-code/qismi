@@ -39,7 +39,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { level, component, lessonName } = req.body;
+    const { level, component, lessonName, count } = req.body;
 
     if (!level || !component || !lessonName) {
       return res.status(400).json({ 
@@ -47,12 +47,13 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    const countNum = Math.min(Math.max(parseInt(count) || 1, 1), 5);
     const ai = getAIClient();
     const levelStr = level === "5" ? "الخامس ابتدائي" : "السادس ابتدائي";
     
     const prompt = `أنت مفتش تربوي مغربي خبير ذو خبرة واسعة في تدريس اللغة العربية لمرحلة الابتدائي. 
-صغ سؤالاً تفاعلياً واحداً مبسطاً ومناسباً لتلاميذ الابتدائي في المغرب لدرس [${lessonName}] للمستوى [${levelStr}] في مكون [${component}]. 
-صغ السؤال بصيغة اختيار من متعدد مع تحديد الإجابة الصحيحة وخيارين خاطئين بكلمات وجيزة جداً وسهلة الاستيعاب وبلسان عربي فصيح رصين خالٍ من التعقيد، تتماشى تماماً مع المنهاج التربوي المغربي الرسمي وبدون أي رموز تعبيرية (Emojis) نهائياً في النصوص.`;
+صغ عيّنة من [${countNum}] أسئلة تفاعلية مبسطة ومناسبة تماماً لتلاميذ الابتدائي في المغرب لدرس [${lessonName}] للمستوى [${levelStr}] في مكون [${component}]. 
+صغ كل سؤال بصيغة اختيار من متعدد مع تحديد الإجابة الصحيحة وخيارين خاطئين بكلمات وجيزة جداً وسهلة الاستيعاب وبلسان عربي فصيح رصين خالٍ من التعقيد، تتماشى تماماً مع المنهاج التربوي المغربي الرسمي وبدون أي رموز تعبيرية (Emojis) نهائياً في النصوص.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
@@ -62,24 +63,34 @@ export default async function handler(req: any, res: any) {
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            question: { 
-              type: Type.STRING, 
-              description: "نص السؤال التربوي المطروح بطريقة واضحة ومبسطة" 
-            },
-            correctAnswer: { 
-              type: Type.STRING, 
-              description: "الجواب الصحيح بدقة وكلمات قليلة جداً" 
-            },
-            wrongAnswer1: { 
-              type: Type.STRING, 
-              description: "الخيار الخاطئ المقترح الأول بكلمات قليلة جداً" 
-            },
-            wrongAnswer2: { 
-              type: Type.STRING, 
-              description: "الخيار الخاطئ المقترح الثاني بكلمات قليلة جداً" 
+            questions: {
+              type: Type.ARRAY,
+              description: "قائمة الأسئلة التفاعلية المولدة",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  question: { 
+                    type: Type.STRING, 
+                    description: "نص السؤال التربوي المطروح بطريقة واضحة ومبسطة" 
+                  },
+                  correctAnswer: { 
+                    type: Type.STRING, 
+                    description: "الجواب الصحيح بدقة وكلمات قليلة جداً" 
+                  },
+                  wrongAnswer1: { 
+                    type: Type.STRING, 
+                    description: "الخيار الخاطئ المقترح الأول بكلمات قليلة جداً" 
+                  },
+                  wrongAnswer2: { 
+                    type: Type.STRING, 
+                    description: "الخيار الخاطئ المقترح الثاني بكلمات قليلة جداً" 
+                  }
+                },
+                required: ["question", "correctAnswer", "wrongAnswer1", "wrongAnswer2"],
+              }
             }
           },
-          required: ["question", "correctAnswer", "wrongAnswer1", "wrongAnswer2"],
+          required: ["questions"],
         },
       },
     });
@@ -90,9 +101,18 @@ export default async function handler(req: any, res: any) {
     }
 
     const parsedData = JSON.parse(responseText.trim());
+    let questionsArray = [];
+    if (parsedData.questions && Array.isArray(parsedData.questions)) {
+      questionsArray = parsedData.questions;
+    } else if (Array.isArray(parsedData)) {
+      questionsArray = parsedData;
+    } else {
+      questionsArray = [parsedData];
+    }
+
     return res.status(200).json({
       success: true,
-      data: parsedData
+      data: questionsArray
     });
   } catch (error: any) {
     console.error("خطأ أثناء توليد السؤال بواسطة الذكاء الاصطناعي برابط Vercel:", error);
