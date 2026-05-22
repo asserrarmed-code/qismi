@@ -31,8 +31,12 @@ import {
   Paperclip,
   UploadCloud,
   FileUp,
-  ImageIcon,
-  MessageSquare
+  Image as ImageIcon,
+  MessageSquare,
+  Settings,
+  Key,
+  User,
+  Lock
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -93,7 +97,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
 
   // General Filter
   const [viewLevel, setViewLevel] = useState<'all' | '5' | '6'>('all');
-  const [activeTab, setActiveTab] = useState<'exercises' | 'scores' | 'absences' | 'documents' | 'notes' | 'accounts'>('exercises');
+  const [activeTab, setActiveTab] = useState<'exercises' | 'scores' | 'absences' | 'documents' | 'notes' | 'accounts' | 'settings'>('exercises');
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -627,7 +631,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
         throw new Error('الاستجابة المستلمة من السيرفر غير مطابقة للتعليمات.');
       }
     } catch (err: any) {
-      setAiGeneratorError('حدث خطأ في الاتصال بنظام الذكاء الاصطناعي، يرجى التأكد من صلاحية مفتاح الـ API ومحاولة التوليد مرة أخرى.');
+      setAiGeneratorError('حدث خطأ في الاتصال بنظام الذكاء الاصطناعي، يرجى التأكد من صلاحية مفتاح الـ API (VITE_GEMINI_API_KEY) ومحاولة التوليد مرة أخرى.');
     } finally {
       setIsAiGenerating(false);
     }
@@ -852,7 +856,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
 
         <div className="space-y-3 relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/15 border border-white/20 rounded-full backdrop-blur-md">
-            <span className="h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
+            <span className="h-2 w-2 rounded-full bg-emerald-350 animate-pulse" />
             <Smile className="h-3.5 w-3.5 text-amber-300" />
             <span className="text-[10px] font-black text-amber-200 uppercase tracking-wider">
               بوابة الإدارة التربوية والأساتذة من السحابة
@@ -957,6 +961,18 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
           >
             <Users className="h-4 w-4" />
             <span>إدارة حسابات التلاميذ</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex-1 lg:flex-initial text-center px-6 py-3.5 rounded-xl text-xs font-black transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap ${
+              activeTab === 'settings' 
+                ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md' 
+                : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/50'
+            }`}
+          >
+            <Settings className="h-4 w-4" />
+            <span>إعدادات البوابة والحساب</span>
           </button>
         </div>
 
@@ -1106,7 +1122,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     </div>
                   )}
                   {aiGeneratorSuccess && (
-                     <div className="bg-emerald-50 text-emerald-800 border-r-4 border-emerald-500 px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                    <div className="bg-emerald-50 text-emerald-800 border-r-4 border-emerald-500 px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                       <span>{aiGeneratorSuccess}</span>
                     </div>
@@ -1165,7 +1181,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                   >
                     {isAiGenerating ? (
                       <>
-                        <div className="h-4 w-4 border-2 border-t-white border-white/30 rounded-full animate-spin" />
+                        <div className="h-4 h-4 w-4 border-2 border-t-white border-white/30 rounded-full animate-spin" />
                         <span>جاري صياغة وتوليد سؤال ذكي...</span>
                       </>
                     ) : (
@@ -1273,7 +1289,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-50 pb-2">
                               <div className="flex items-center gap-2">
                                 <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
-                                  ex.level === '5' ? 'bg-blue-50 text-blue-850 border border-blue-200' : 'bg-indigo-50 text-indigo-850 border border-indigo-200'
+                                  ex.level === '5' ? 'bg-blue-50 text-blue-800 border border-blue-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
                                 }`}>
                                   الصف {ex.level === '5' ? 'الخامس' : 'السادس'}
                                 </span>
@@ -1314,7 +1330,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
               <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-lg shadow-sky-100/10">
                 <h2 className="text-sm sm:text-base font-black text-slate-850 pb-3 border-b border-sky-50 mb-5 flex items-center gap-2">
                   <span className="p-1 px-2.5 bg-emerald-100 text-emerald-600 rounded-lg text-xs font-black">+</span>
-                  <span>إدخل وتفتيش نقط المراقبة</span>
+                  <span>إدخال وتفتيش نقط المراقبة</span>
                 </h2>
                 
                 <form onSubmit={handleAddScore} className="space-y-5">
@@ -1338,7 +1354,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     <input
                       type="text"
                       required
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm font-semibold text-slate-855 transition-all duration-200"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm font-semibold text-slate-850 transition-all duration-200"
                       placeholder="امحمد الراضي الفاسي"
                       value={scoreStudentName}
                       onChange={(e) => setScoreStudentName(e.target.value)}
@@ -1380,7 +1396,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     <input
                       type="text"
                       required
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm text-slate-855 font-semibold transition-all duration-200"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm text-slate-850 font-semibold transition-all duration-200"
                       placeholder="مثال: اللغة العربية، الرياضيات، النشاط العلمي"
                       value={scoreSubject}
                       onChange={(e) => setScoreSubject(e.target.value)}
@@ -1395,7 +1411,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       <input
                         type="text"
                         required
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm font-sans font-black text-slate-855 transition-all duration-200"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm font-sans font-black text-slate-850 transition-all duration-200"
                         placeholder="مثال: 9.50/10 أو 18/20"
                         value={scoreValue}
                         onChange={(e) => setScoreValue(e.target.value)}
@@ -1411,8 +1427,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         value={scoreType}
                         onChange={(e: any) => setScoreType(e.target.value)}
                       >
-                        <option value="نقطة المراقبة المستمرة font-bold">نقط المراقبة المستمرة</option>
-                        <option value="الفرض font-bold">الفرض الأساسي</option>
+                        <option value="نقطة المراقبة المستمرة">نقط المراقبة المستمرة</option>
+                        <option value="الفرض">الفرض الأساسي</option>
                       </select>
                     </div>
                   </div>
@@ -1469,13 +1485,13 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                                 <td className="p-4 text-slate-950 font-black">{sc.studentName}</td>
                                 <td className="p-4">
                                   <span className={`px-2 py-0.5 text-[9px] font-bold rounded ${
-                                    sc.level === '5' ? 'bg-blue-50 text-blue-805 border-r-2 border-blue-500' : 'bg-indigo-50 text-indigo-805 border-r-2 border-indigo-500'
+                                    sc.level === '5' ? 'bg-blue-50 text-blue-800 border-r-2 border-blue-500' : 'bg-indigo-50 text-indigo-800 border-r-2 border-indigo-500'
                                   }`}>
                                     المستوى {sc.level === '5' ? '٥' : '٦'}
                                   </span>
                                 </td>
                                 <td className="p-4">{sc.subject}</td>
-                                <td className="p-4 text-slate-505 text-[10px]">{sc.scoreType}</td>
+                                <td className="p-4 text-slate-500 text-[10px]">{sc.scoreType}</td>
                                 <td className="p-4 font-sans font-black text-center text-blue-600 bg-sky-50/20 tracking-tight text-[13px]">
                                   {sc.scoreValue}
                                 </td>
@@ -1531,7 +1547,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     <input
                       type="text"
                       required
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm font-semibold text-slate-855 transition-all duration-200"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm font-semibold text-slate-850 transition-all duration-200"
                       placeholder="عبد الرحمن السلاوي"
                       value={absenceStudentName}
                       onChange={(e) => setAbsenceStudentName(e.target.value)}
@@ -1552,7 +1568,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         />
                         <span>المستوى الخامس</span>
                       </label>
-                      <label className="flex items-center text-xs font-bold text-slate-705 cursor-pointer select-none gap-1.5">
+                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
                         <input
                           type="radio"
                           name="absenceLevel"
@@ -1620,9 +1636,9 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 </div>
 
                 {isLoading ? (
-                  <p className="text-xs text-slate-505 text-center py-10 font-bold">جاري تحديث قائمة الغياب...</p>
+                  <p className="text-xs text-slate-500 text-center py-10 font-bold">جاري تحديث قائمة الغياب...</p>
                 ) : absences.filter(ab => viewLevel === 'all' || ab.level === viewLevel).length === 0 ? (
-                  <p className="text-xs text-slate-505 text-center py-10 font-bold bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200">
+                  <p className="text-xs text-slate-500 text-center py-10 font-bold bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200">
                     لم يُرصد أو يُدرج أي غياب تلميذ بالقسم اليوم. جميع تلاميذك منضبطون!
                   </p>
                 ) : (
@@ -1642,10 +1658,10 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                           {absences
                             .filter(ab => viewLevel === 'all' || ab.level === viewLevel)
                             .map((ab) => (
-                              <tr key={ab.id} className="hover:bg-sky-50/40 text-slate-855 font-bold transition-colors duration-200">
+                              <tr key={ab.id} className="hover:bg-sky-50/40 text-slate-850 font-bold transition-colors duration-200">
                                 <td className="p-4 text-slate-950 font-black">{ab.studentName}</td>
                                 <td className="p-4">المستوى {ab.level === '5' ? '٥' : '٦'}</td>
-                                <td className="p-4 text-center font-sans text-slate-505">{ab.date}</td>
+                                <td className="p-4 text-center font-sans text-slate-500">{ab.date}</td>
                                 <td className="p-4 text-center">
                                   <span className={`px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold ${
                                     ab.absenceType === 'غياب مبرر' 
@@ -1681,7 +1697,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
             {/* Document Upload Form */}
             <div className="lg:col-span-5 space-y-4">
               <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-lg shadow-sky-100/10">
-                <h2 className="text-sm sm:text-base font-black text-slate-855 pb-3 border-b border-sky-50 mb-5 flex items-center gap-2">
+                <h2 className="text-sm sm:text-base font-black text-slate-850 pb-3 border-b border-sky-50 mb-5 flex items-center gap-2">
                   <span className="p-1 px-2.5 bg-sky-100 text-sky-600 rounded-lg text-xs font-black">+</span>
                   <span>رفع ومشاركة وثيقة تربوية أو صورة</span>
                 </h2>
@@ -1709,7 +1725,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       className={`border-2 border-dashed rounded-3xl p-6 text-center transition-all duration-200 cursor-pointer ${
                         docFile 
                           ? 'border-emerald-300 bg-emerald-50/20' 
-                          : 'border-sky-200 bg-sky-50/5 hover:border-sky-400 hover:bg-sky-50/10'
+                          : 'border-sky-200 bg-sky-50/5 hover:border-sky-405 hover:bg-sky-50/10'
                       }`}
                       onClick={() => document.getElementById('pedagogical_file_input')?.click()}
                       onDragOver={(e) => { e.preventDefault(); }}
@@ -1738,10 +1754,10 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         ) : (
                           <UploadCloud className="h-10 w-10 text-sky-400" />
                         )}
-                        <span className="text-xs font-black text-slate-705">
+                        <span className="text-xs font-black text-slate-700">
                           {docFile ? docFile.name : "اسحب وأدرج الملف هنا أو اضغط للتصفح"}
                         </span>
-                        <span className="text-[10px] text-slate-405 font-bold">
+                        <span className="text-[10px] text-slate-400 font-bold">
                           {docFile 
                             ? `الحجم: ${(docFile.size / 1024).toFixed(1)} كيلوبايت` 
                             : "الحد الأقصى الموصى به: 10 ميغابايت"
@@ -1763,18 +1779,18 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                           name="docLevel"
                           value="5"
                           checked={docLevel === '5'}
-                          onChange={() => setNewAccLevel('5')}
+                          onChange={() => setDocLevel('5')}
                           className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
                         />
                         <span>المستوى الخامس ابتدائي</span>
                       </label>
-                      <label className="flex items-center text-xs font-bold text-slate-708 cursor-pointer select-none gap-1.5">
+                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
                         <input
                           type="radio"
                           name="docLevel"
                           value="6"
                           checked={docLevel === '6'}
-                          onChange={() => setNewAccLevel('6')}
+                          onChange={() => setDocLevel('6')}
                           className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
                         />
                         <span>المستوى السادس ابتدائي</span>
@@ -1801,7 +1817,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                   <button
                     type="submit"
                     disabled={isUploading}
-                    className="w-full bg-gradient-to-r from-sky-400 to-blue-500 hover:from-sky-500 hover:to-blue-600 disabled:from-slate-350 disabled:to-slate-450 text-white font-extrabold py-3.5 px-4 rounded-2xl text-xs transition-all duration-250 cursor-pointer shadow-lg shadow-sky-100 flex items-center justify-center gap-2 active:scale-98"
+                    className="w-full bg-gradient-to-r from-sky-400 to-blue-500 hover:from-sky-500 hover:to-blue-600 disabled:from-slate-350 disabled:to-slate-450 text-white font-extrabold py-3.5 px-4 rounded-2xl text-xs transition-all duration-255 cursor-pointer shadow-lg shadow-sky-100 flex items-center justify-center gap-2 active:scale-98"
                   >
                     <Plus className="h-4.5 w-4.5" />
                     <span>{isUploading ? "جاري الرفع الآن..." : "رفع ونشر الوثيقة"}</span>
@@ -1814,7 +1830,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
             <div className="lg:col-span-7 space-y-4">
               <div className="bg-white border border-sky-100 rounded-3xl p-6 shadow-lg shadow-sky-100/10">
                 <div className="flex justify-between items-center pb-3 border-b border-sky-50 mb-5">
-                  <h2 className="text-sm font-black text-slate-855 tracking-wide flex items-center gap-2">
+                  <h2 className="text-sm font-black text-slate-850 tracking-wide flex items-center gap-2">
                     <FolderOpen className="h-4.5 w-4.5 text-sky-500" />
                     <span>خزانة الوثائق والملفات التعليمية المشتركة</span>
                   </h2>
@@ -1826,8 +1842,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 {isLoading ? (
                   <p className="text-xs text-sky-500 text-center py-12 font-bold">جاري تحديث قائمة الملفات...</p>
                 ) : documents.filter(d => viewLevel === 'all' || d.level === viewLevel).length === 0 ? (
-                  <div className="text-center py-14 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-205 p-6">
-                    <p className="text-xs text-slate-505 font-bold">لم تقم بمشاركة ورفع أي وثائق تربوية تذكر في هذا الفلتر بعد.</p>
+                  <div className="text-center py-14 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-6">
+                    <p className="text-xs text-slate-500 font-bold">لم تقم بمشاركة ورفع أي وثائق تربوية تذكر في هذا الفلتر بعد.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1861,7 +1877,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                                 <h3 className="text-xs font-black text-slate-800 line-clamp-2 leading-tight">
                                   {d.name}
                                 </h3>
-                                <p className="text-[9px] text-slate-405 font-bold font-sans">
+                                <p className="text-[9px] text-slate-400 font-bold font-sans">
                                   {new Date(d.createdAt).toLocaleDateString('ar-MA')}
                                 </p>
                               </div>
@@ -1905,7 +1921,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     <span className="p-1 px-2.5 bg-indigo-100 text-indigo-600 rounded-xl text-xs font-black">📝</span>
                     <span>دفتر الملاحظات والتوجيهات الشخصية للطلبة</span>
                   </h2>
-                  <p className="text-xs text-slate-550 font-bold mt-1 font-sans">
+                  <p className="text-xs text-slate-500 font-bold mt-1 font-sans">
                     أدخل توجيهات وملاحظات بيداغوجية مخصصة لكل تلميذ لتظهر له مباشرة في حسابه الخاص.
                   </p>
                 </div>
@@ -1938,14 +1954,14 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 >
                   <div className="flex justify-between items-center bg-slate-100/50 p-3 rounded-xl border border-slate-200/30">
                     <h3 className="text-xs sm:text-sm font-black text-slate-800">
-                      كتابة ملاحظة وتوجيه للتلميذ(ها): {" "}
+                      كتابة ملاحظة وتوجيه للتلميذ(ة): {" "}
                       <span className="text-indigo-650 font-black">
                         {studentNotes.find(s => s.id === editingStudentId)?.displayName}
                       </span>
                     </h3>
                     <button 
                       onClick={() => { setEditingStudentId(null); setEditingNoteValue(''); }}
-                      className="text-xs font-bold text-red-500 hover:text-red-700 transition cursor-pointer"
+                      className="text-xs font-bold text-red-500 hover:text-red-705 transition cursor-pointer"
                     >
                       إلغاء التعديل
                     </button>
@@ -1979,7 +1995,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       value={editingNoteValue}
                       onChange={(e) => setEditingNoteValue(e.target.value)}
                       placeholder="اكتب ملاحظة توجيهية مخصصة للتلميذ هنا... (مثلاً: 'أحسنت في الإملاء، حاول التركيز أكثر في التراكيب')"
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 text-xs font-semibold text-slate-855 transition shadow-inner"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 text-xs font-semibold text-slate-850 transition shadow-inner"
                     />
                   </div>
 
@@ -1992,13 +2008,13 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                           handleSaveStudentNote(target.id, target.displayName, target.level);
                         }
                       }}
-                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl cursor-pointer transition flex items-center gap-2"
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-705 text-white text-xs font-black rounded-xl cursor-pointer transition flex items-center gap-2"
                     >
                       {isSavingNote ? 'جاري الحفظ...' : 'حفظ الملاحظة ونشرها'}
                     </button>
                     <button
                       onClick={() => { setEditingStudentId(null); setEditingNoteValue(''); }}
-                      className="px-4 py-2.5 bg-slate-250 hover:bg-slate-300 text-slate-855 text-xs font-black rounded-xl cursor-pointer transition"
+                      className="px-4 py-2.5 bg-slate-250 hover:bg-slate-300 text-slate-850 text-xs font-black rounded-xl cursor-pointer transition"
                     >
                       تراجع
                     </button>
@@ -2011,7 +2027,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 <div className="text-center py-16 text-indigo-500 font-bold text-xs animate-pulse">جاري جلب بيانات التلاميذ والملاحظات...</div>
               ) : studentNotes.filter(n => viewLevel === 'all' || n.level === viewLevel).length === 0 ? (
                 <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                  <p className="text-xs text-slate-505 font-bold">لم يعثر على تلاميذ متوافقين مع الفلتر الحالي.</p>
+                  <p className="text-xs text-slate-500 font-bold">لم يعثر على تلاميذ متوافقين مع الفلتر الحالي.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -2023,7 +2039,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         className={`border rounded-2xl p-5 bg-gradient-to-br from-white to-slate-50 shadow-sm flex flex-col justify-between transition-all duration-300 gap-4 ${
                           editingStudentId === student.id
                             ? 'border-indigo-400 ring-4 ring-indigo-100 bg-indigo-50/5'
-                            : 'border-slate-100 hover:border-slate-300 hover:shadow-md'
+                            : 'border-slate-100 hover:border-slate-305 hover:shadow-md'
                         }`}
                       >
                         <div className="space-y-3">
@@ -2057,7 +2073,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                               {student.notes ? (
                                 <p className="text-[11px] font-bold text-slate-800 leading-normal">{student.notes}</p>
                               ) : (
-                                <p className="text-[11px] text-slate-404 font-medium italic">لا توجد ملاحظة حالية لهذا التلميذ.</p>
+                                <p className="text-[11px] text-slate-400 font-medium italic">لا توجد ملاحظة حالية لهذا التلميذ.</p>
                               )}
                             </div>
                           </div>
@@ -2099,7 +2115,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     <span className="p-1 px-2.5 bg-sky-100 text-sky-600 rounded-xl text-xs font-black">🔑</span>
                     <span>منظومة إعداد وتوليد حسابات ولوج تلاميذ القسم</span>
                   </h2>
-                  <p className="text-xs text-slate-550 font-bold mt-1 font-sans">
+                  <p className="text-xs text-slate-500 font-bold mt-1 font-sans">
                     قم بإنشاء حسابات مخصصة لتلاميذك الجدد، مع توليد فوري وتلقائي لكلمات المرور وتصدير بطاقات الولوج للتوزيع داخل الفصل.
                   </p>
                 </div>
@@ -2153,7 +2169,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         value={newAccName}
                         onChange={(e) => handleNameChange(e.target.value)}
                         placeholder="مثال: يوسف الإدريسي"
-                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-semibold text-slate-855 transition-all shadow-sm"
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-semibold text-slate-850 transition-all shadow-sm"
                       />
                     </div>
 
@@ -2204,7 +2220,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         />
                         <span className="absolute right-3 top-3.5 text-slate-400 text-xs text-center font-bold">@</span>
                       </div>
-                      <p className="text-[10px] text-slate-404 font-bold leading-normal">
+                      <p className="text-[10px] text-slate-400 font-bold leading-normal">
                         ملاحظة: اسم المستخدم باللغة الأجنبية للولوج السليم (مثال: <span className="font-mono">youssef25</span>)
                       </p>
                     </div>
@@ -2212,98 +2228,112 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     {/* Password Entry Output Area */}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-black text-slate-700">
-                        الرقم السري المقترح للتسجيل والولوج:
+                        الرقم السري للولوج (سيتم توليده تلقائياً):
                       </label>
                       <input
                         type="text"
                         required
                         value={newAccPassword}
-                        onChange={(e) => setNewAccPassword(e.target.value)}
-                        placeholder="رمز الدخول السري..."
-                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-bold font-mono text-amber-700 transition shadow-sm"
+                        onChange={(e) => setNewAccPassword(e.target.value.trim())}
+                        placeholder="سيتم توليده تلقائياً..."
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-bold font-mono text-amber-700 transition"
                       />
                     </div>
 
                     <button
                       type="submit"
                       disabled={isCreatingAcc}
-                      className="w-full py-3.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-750 disabled:from-slate-350 disabled:to-slate-400 text-white font-black text-xs rounded-2xl shadow-lg transition duration-200 flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full py-3.5 bg-sky-500 hover:bg-sky-600 text-white rounded-2xl text-xs font-black font-sans cursor-pointer transition shadow-md shadow-sky-500/10 flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0"
                     >
-                      {isCreatingAcc ? (
-                        <>
-                          <div className="h-4 w-4 border-2 border-t-white border-white/20 rounded-full animate-spin" />
-                          <span>جاري صياغة بيانات الطالب...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4 shrink-0" />
-                          <span>توليد حساب التلميذ فوراً</span>
-                        </>
-                      )}
+                      {isCreatingAcc ? 'جاري تسجيل وتوليد الحساب...' : 'توليد وتسجيل الحساب التربوي الجديد 🚀'}
                     </button>
                   </form>
+
+                  <div className="bg-slate-100 rounded-2xl p-4 border border-slate-200/30 text-[10px] space-y-1 text-slate-500">
+                    <span className="block font-black text-slate-700">💡 توجيه تربوي وإشعار الأستاذ:</span>
+                    <p className="leading-relaxed">
+                      عند إنشاء الحساب بنجاح، يرجى الضغط على زر <span className="font-black text-emerald-700">"تصدير وطباعة بطاقات التلاميذ"</span> لتوليد ورقة PDF فريدة وبطاقات هويات ملونة مرقمة مجهزة بخطوط القص ✂️ لتوزيعها فوراً على التلاميذ.
+                    </p>
+                  </div>
                 </div>
 
-                {/* Left Side: Directory and Accounts Grid */}
-                <div className="xl:col-span-8 bg-white border border-sky-100/80 rounded-3xl p-6 shadow-sm space-y-4">
-                  <div className="flex justify-between items-center pb-2 border-b border-sky-50">
-                    <h3 className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2">
-                      <span className="p-1 px-2.5 bg-sky-50 text-sky-600 rounded-lg text-[10px] font-black">📋</span>
-                      <span>تلاميذ الفئة الفعالة (الحسابات المعتمدة سحابياً)</span>
-                    </h3>
+                {/* Left Side: Interactive Directory Table */}
+                <div className="xl:col-span-8 space-y-4">
+                  
+                  {/* Filter / Search Info and Stats bar */}
+                  <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                      <span>📂</span>
+                      <span>سجل إدارة المصادقة والحسابات المقيدة للطلبة المعتمدين والمحدثين:</span>
+                    </span>
+                    
+                    <button
+                      onClick={loadAllData}
+                      title="تحديث البيانات"
+                      className="text-xs p-2 bg-white rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition font-black cursor-pointer shadow-sm flex items-center gap-1.5"
+                    >
+                      <span>🔄</span>
+                      <span>تحديث اللائحة</span>
+                    </button>
                   </div>
 
                   {isLoading ? (
-                    <div className="text-center py-16 text-sky-500 font-bold text-xs animate-pulse">جاري تحميل سجل السحابة...</div>
+                    <div className="text-center py-20 text-sky-500 font-bold text-xs animate-pulse">جاري جلب بيانات التلاميذ والحسابات من السيرفر السحابي...</div>
                   ) : studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel).length === 0 ? (
-                    <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-205">
-                      <p className="text-xs text-slate-500 font-bold">لا يوجد أي حساب تلميذ معتمد للفلتر النشط.</p>
+                    <div className="text-center py-16 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                      <p className="text-xs text-slate-400 font-bold">لا توجد حسابات مسجلة تحت هذا الفلتر حالياً.</p>
                     </div>
                   ) : (
-                    <div className="overflow-hidden border border-slate-105 rounded-2xl shadow-inner bg-slate-50/10">
+                    <div className="overflow-hidden border border-slate-100 rounded-2xl shadow-sm bg-white">
                       <div className="overflow-x-auto">
-                        <table className="w-full text-right text-xs border-collapse">
+                        <table className="w-full text-right border-collapse text-xs">
                           <thead>
-                            <tr className="bg-slate-900 text-white font-black border-b border-slate-800">
-                              <th className="p-4">اسم التلميذ الكامل</th>
-                              <th className="p-4 text-center">الصف الدراسي</th>
-                              <th className="p-4">اسم المستخدم</th>
-                              <th className="p-4">الرقم السري</th>
-                              <th className="p-4 text-center">الإجراء</th>
+                            <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400 font-bold">
+                              <th className="py-3 px-4 text-center">الرقم</th>
+                              <th className="py-3 px-4">الاسم الكامل للتلميذ(ة)</th>
+                              <th className="py-3 px-4 text-center">المستوى الدراسي</th>
+                              <th className="py-3 px-4">اسم المستخدم للولوج</th>
+                              <th className="py-3 px-4">الرقم السري للولوج</th>
+                              <th className="py-3 px-4 text-center">الإجراءات والمسح</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100 bg-white">
+                          <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
                             {studentAccounts
                               .filter(acc => viewLevel === 'all' || acc.level === viewLevel)
-                              .map((acc) => (
-                                <tr key={acc.id} className="hover:bg-sky-50/45 text-slate-800 font-bold transition-colors duration-150">
-                                  <td className="p-4 text-slate-950 font-black flex items-center gap-2.5">
-                                    <div className="h-7 w-7 bg-slate-100 text-slate-700 font-black rounded-full flex items-center justify-center text-[10px] border border-slate-205">
-                                      {acc.displayName.charAt(0)}
+                              .map((acc, index) => (
+                                <tr key={acc.id} className="hover:bg-slate-50/40 transition-colors">
+                                  <td className="py-3.5 px-4 text-center text-slate-400 font-bold font-sans">{index + 1}</td>
+                                  <td className="py-3.5 px-4">
+                                    <div className="flex items-center gap-2.5">
+                                      <div className="h-6 w-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold select-none">
+                                        {acc.displayName.charAt(0)}
+                                      </div>
+                                      <span className="font-bold text-slate-900">{acc.displayName}</span>
                                     </div>
-                                    <span>{acc.displayName}</span>
                                   </td>
-                                  <td className="p-4 text-center">
-                                    <span className={`px-2.5 py-1 rounded-lg text-[9px] font-bold ${
-                                      acc.level === '5' ? 'bg-blue-50 text-blue-805' : 'bg-indigo-50 text-indigo-805'
+                                  <td className="py-3.5 px-4 text-center">
+                                    <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black ${
+                                      acc.level === '5' ? 'bg-blue-50 text-blue-700' : 'bg-indigo-50 text-indigo-700'
                                     }`}>
-                                      المستوى {acc.level === '5' ? '٥' : '٦'} ابتدائي
+                                      المستوى {acc.level === '5' ? 'الخامس' : 'السادس'} ابتدائي
                                     </span>
                                   </td>
-                                  <td className="p-4 font-mono font-bold text-indigo-700">@{acc.username}</td>
-                                  <td className="p-4 font-mono font-black text-amber-700 bg-amber-50/10">{acc.password || 'primary' + acc.level}</td>
-                                  <td className="p-4 text-center">
+                                  <td className="py-3.5 px-4 font-mono font-bold text-indigo-600">
+                                    @{acc.username}
+                                  </td>
+                                  <td className="py-3.5 px-4 font-mono">
+                                    <span className="bg-amber-50 text-amber-800 border-b border-amber-200/50 px-2 py-0.5 rounded-lg text-[10px] font-extrabold shadow-sm">
+                                      {acc.password || 'primary' + acc.level}
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-4 text-center">
                                     <button
                                       disabled={isDeletingAccId === acc.id}
                                       onClick={() => handleDeleteStudentAccount(acc.id, acc.displayName)}
-                                      className="p-1.5 bg-red-50 text-red-650 hover:bg-red-100 border border-red-100 rounded-xl transition duration-150 cursor-pointer flex items-center justify-center mx-auto disabled:opacity-50"
-                                      title="إلغاء وحذف الطالب"
+                                      className="p-1 px-2.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg text-[10px] font-black cursor-pointer transition flex items-center gap-1 mx-auto"
                                     >
-                                      {isDeletingAccId === acc.id ? (
-                                        <div className="h-3 w-3 border-2 border-t-red-600 border-red-200 rounded-full animate-spin" />
-                                      ) : (
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      )}
+                                      <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                                      <span>{isDeletingAccId === acc.id ? 'حذف...' : 'حذف'}</span>
                                     </button>
                                   </td>
                                 </tr>
@@ -2314,6 +2344,176 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     </div>
                   )}
                 </div>
+
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: PORTAL SETTINGS */}
+        {activeTab === 'settings' && (
+          <div className="lg:col-span-12 space-y-6">
+            <div className="bg-white border border-sky-100 rounded-[28px] p-6 sm:p-8 shadow-xl shadow-sky-100/10" dir="rtl">
+              
+              {/* Header Box */}
+              <div className="pb-6 border-b border-sky-50 mb-8">
+                <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <span className="p-1 px-2.5 bg-sky-100 text-sky-600 rounded-xl text-xs font-black">⚙️</span>
+                  <span>لوحة التخصيص وإعدادات البوابة المتقدمة</span>
+                </h2>
+                <p className="text-xs text-slate-500 font-bold mt-1 font-sans">
+                  من هنا يمكنك تخصيص اسمك المعتمد كأستاذ، تغيير كلمة مرور الولوج الخاصة بك، والتحكم التام في إخفاء أو تصفية بيانات المعاينة للبدء في تشغيل فضاء التدريس الحقيقي.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                
+                {/* Profile Edit Column */}
+                <div className="xl:col-span-6 bg-slate-50 border border-slate-200/60 rounded-3xl p-6 space-y-5">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-800 border-b border-slate-200/50 pb-3 flex items-center gap-2">
+                    <User className="h-4 w-4 text-sky-500" />
+                    <span>تخصيص الهوية الشخصية للأستاذ (أنت)</span>
+                  </h3>
+
+                  <form 
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = e.target as HTMLFormElement;
+                      const dName = (form.elements.namedItem('dispName') as HTMLInputElement).value;
+                      const uName = (form.elements.namedItem('usrName') as HTMLInputElement).value;
+                      const uPass = (form.elements.namedItem('usrPass') as HTMLInputElement).value;
+                      
+                      try {
+                        await dbService.saveCustomTeacher(dName, uName, uPass);
+                        alert("تم تحديث وحفظ بيانات الأستاذ الشخصية بنجاح! يرجى استخدام المعرف السري الجديد للمرة القادمة.");
+                        // Force session state update
+                        session.displayName = dName;
+                        session.username = uName;
+                        // Refresh state
+                        loadAllData();
+                      } catch (err) {
+                        alert("حدث خطأ أثناء حفظ التعديلات.");
+                      }
+                    }} 
+                    className="space-y-4"
+                  >
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-black text-slate-700">
+                        الاسم الكامل والمحترم المعتمد للأستاذ:
+                      </label>
+                      <input
+                        type="text"
+                        name="dispName"
+                        required
+                        defaultValue={dbService.getCustomTeacher()?.displayName || session.displayName}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-bold text-slate-800 transition shadow-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-black text-slate-700">
+                        اسم المستخدم الخاص بك للولوج (username):
+                      </label>
+                      <input
+                        type="text"
+                        name="usrName"
+                        required
+                        defaultValue={dbService.getCustomTeacher()?.username || session.username}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-bold text-slate-800 transition shadow-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-black text-slate-700">
+                        رقمك السري الخاص أو الجديد:
+                      </label>
+                      <input
+                        type="password"
+                        name="usrPass"
+                        required
+                        defaultValue={dbService.getCustomTeacher()?.password || "123456"}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-sans font-bold text-slate-800 transition shadow-sm"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-3.5 bg-sky-500 hover:bg-sky-600 text-white rounded-2xl text-xs font-black cursor-pointer transition shadow-md shadow-sky-500/10 flex items-center justify-center gap-2 hover:-translate-y-0.5"
+                    >
+                      <span>💾 حفظ وتأكيد بيانات الهوية الجديدة</span>
+                    </button>
+                  </form>
+                </div>
+
+                {/* Live Mode Controls Column */}
+                <div className="xl:col-span-6 bg-slate-50 border border-slate-200/60 rounded-3xl p-6 space-y-6">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-800 border-b border-slate-200/50 pb-3 flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-emerald-500" />
+                    <span>التحكم في بيانات المعاينة ونمط الفصل النظيف</span>
+                  </h3>
+
+                  <div className="space-y-4">
+                    <p className="text-xs text-slate-600 font-bold leading-relaxed">
+                      عند انتقالك إلى وضع الاستخدام الحقيقي مع تلاميذك الفعليين، يمكنك إخفاء جميع المعطيات والمستندات الافتراضية الملحقة تلقائياً بنقرة زر واحدة.
+                    </p>
+
+                    {/* Checkbox Card for live mode */}
+                    <div 
+                      onClick={() => {
+                        const nextVal = localStorage.getItem('edu_hide_demo_data') === 'true' ? 'false' : 'true';
+                        localStorage.setItem('edu_hide_demo_data', nextVal);
+                        loadAllData();
+                      }}
+                      className={`p-4 rounded-2xl border cursor-pointer select-none transition ${
+                        localStorage.getItem('edu_hide_demo_data') === 'true'
+                          ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-100'
+                          : 'bg-white border-slate-200 hover:bg-slate-100/30'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={localStorage.getItem('edu_hide_demo_data') === 'true'}
+                          readOnly
+                          className="mt-1 h-4 w-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-400 cursor-pointer"
+                        />
+                        <div className="space-y-1">
+                          <p className="text-xs font-extrabold text-slate-900">حظر وإخفاء الحسابات والتمارين التجريبية</p>
+                          <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">
+                            يقوم بركن وتجميد الفضاء التجريبي وإزالة تلاميذ (student5، student6، أحمد، عمر...) وعزل كافة وثائقهم والتمارين المدمجة، ليتبقّى فقط تلاميذك المدرجين وواجباتك المضافة.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Reset Button */}
+                    <div className="bg-red-50/50 border border-red-100 rounded-2xl p-4 space-y-3">
+                      <span className="block text-[11px] font-black text-red-700 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        تصفية كليّة فورية للفضاء
+                      </span>
+                      <p className="text-[10px] text-slate-550 font-bold leading-normal">
+                        هل قمت بتجربة المنصة وتريد تصفية بيانات الواجبات والنقط والغيابات الوهمية للبدء كلياً كملف نظيف؟
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm("⚠️ هل أنت متأكد تماماً من تصفية لوحة المعاينة للأبد والانتقال للوضع الفعلي؟ سيقوم هذا بإخفاء كافة المستندات والتلاميذ الافتراضية.")) {
+                            localStorage.setItem('edu_hide_demo_data', 'true');
+                            loadAllData();
+                            alert("تم التحويل بنجاح! تم تصفية نموذج العرض وتفعيل الفضاء الدراسي الفعلي باسمك.");
+                          }
+                        }}
+                        className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-black cursor-pointer transition flex items-center justify-center gap-1 shadow-sm"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>تطهير فوري وبدء التدريس الحقيقي</span>
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>
