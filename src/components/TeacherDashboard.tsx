@@ -1562,7 +1562,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                           className="accent-sky-500 h-4.5 w-4.5 animate-none"
                         />
                         <span>المستوى السادس</span>
-                      </labelclassName>
+                      </label className>
                     </div>
                   </div>
 
