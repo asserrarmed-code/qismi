@@ -1344,5 +1344,153 @@ export const dbService = {
       subject: t.subject || 'غير محدد',
       assignedClasses: t.assignedClasses || []
     }));
+  },
+
+  getStudentProfile: async (uid: string): Promise<any> => {
+    let profileData: any = {
+      schoolName: '',
+      arabicTeacher: '',
+      frenchMathTeacher: '',
+      displayName: ''
+    };
+
+    if (isFirebaseAvailable) {
+      try {
+        const docSnap = await getDoc(doc(db, 'users', uid));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          profileData = {
+            schoolName: data.schoolName || '',
+            arabicTeacher: data.arabicTeacher || '',
+            frenchMathTeacher: data.frenchMathTeacher || '',
+            displayName: data.displayName || ''
+          };
+          return profileData;
+        }
+      } catch (err) {
+        console.warn("Error fetching student profile from Firebase:", err);
+      }
+    }
+
+    // fallback: load from local student accounts or unified users all
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const match = localUsers.find((u: any) => u.id === uid);
+    if (match) {
+      profileData = {
+        schoolName: match.schoolName || '',
+        arabicTeacher: match.arabicTeacher || '',
+        frenchMathTeacher: match.frenchMathTeacher || '',
+        displayName: match.displayName || ''
+      };
+    } else {
+      const localStudents = getLocalItems<any>('edu_student_accounts');
+      const studMatch = localStudents.find((s: any) => s.id === uid);
+      if (studMatch) {
+        profileData = {
+          schoolName: studMatch.schoolName || '',
+          arabicTeacher: studMatch.arabicTeacher || '',
+          frenchMathTeacher: studMatch.frenchMathTeacher || '',
+          displayName: studMatch.displayName || ''
+        };
+      }
+    }
+    return profileData;
+  },
+
+  saveStudentProfile: async (uid: string, profile: { schoolName: string; displayName: string; arabicTeacher: string; frenchMathTeacher: string }): Promise<void> => {
+    if (isFirebaseAvailable) {
+      try {
+        await setDoc(doc(db, 'users', uid), {
+          schoolName: profile.schoolName.trim(),
+          arabicTeacher: profile.arabicTeacher.trim(),
+          frenchMathTeacher: profile.frenchMathTeacher.trim(),
+          displayName: profile.displayName.trim(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.warn("Error saving student profile to Firebase:", err);
+      }
+    }
+
+    // Update in edu_users_all
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const idx = localUsers.findIndex(u => u.id === uid);
+    if (idx !== -1) {
+      localUsers[idx] = {
+        ...localUsers[idx],
+        schoolName: profile.schoolName.trim(),
+        arabicTeacher: profile.arabicTeacher.trim(),
+        frenchMathTeacher: profile.frenchMathTeacher.trim(),
+        displayName: profile.displayName.trim(),
+        updatedAt: new Date().toISOString()
+      };
+      saveLocalItems('edu_users_all', localUsers);
+    }
+
+    // Update in edu_student_accounts
+    const localStudents = getLocalItems<any>('edu_student_accounts');
+    const studIdx = localStudents.findIndex(s => s.id === uid);
+    if (studIdx !== -1) {
+      localStudents[studIdx] = {
+        ...localStudents[studIdx],
+        schoolName: profile.schoolName.trim(),
+        arabicTeacher: profile.arabicTeacher.trim(),
+        frenchMathTeacher: profile.frenchMathTeacher.trim(),
+        displayName: profile.displayName.trim(),
+        updatedAt: new Date().toISOString()
+      };
+      saveLocalItems('edu_student_accounts', localStudents);
+    }
+
+    // Update local profile notes list too for uniformity
+    const localNotes = getLocalItems<any>('edu_student_notes');
+    const noteIdx = localNotes.findIndex(n => n.id === uid);
+    if (noteIdx !== -1) {
+      localNotes[noteIdx].displayName = profile.displayName.trim();
+      saveLocalItems('edu_student_notes', localNotes);
+    }
+
+    // Update the live session displayName if it's the current user
+    try {
+      const sessionRaw = localStorage.getItem('edu_session');
+      if (sessionRaw) {
+        const session = JSON.parse(sessionRaw);
+        if (session.uid === uid) {
+          session.displayName = profile.displayName.trim();
+          localStorage.setItem('edu_session', JSON.stringify(session));
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  },
+
+  getSchoolName: async (): Promise<string> => {
+    if (isFirebaseAvailable) {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'school_config'));
+        if (docSnap.exists()) {
+          return docSnap.data().schoolName || '';
+        }
+      } catch (err) {
+        console.warn("Error fetching school name from Firebase:", err);
+      }
+    }
+    return localStorage.getItem('edu_school_name') || 'مدرستنا الابتدائية الرقمية';
+  },
+
+  saveSchoolName: async (schoolName: string): Promise<void> => {
+    const cleanName = schoolName.trim();
+    if (isFirebaseAvailable) {
+      try {
+        await setDoc(doc(db, 'settings', 'school_config'), {
+          schoolName: cleanName,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.warn("Error saving school name to Firebase:", err);
+      }
+    }
+    localStorage.setItem('edu_school_name', cleanName);
   }
 };

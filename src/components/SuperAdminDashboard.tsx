@@ -74,6 +74,10 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
   // Success Feedback Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // School Setting State
+  const [schoolNameInput, setSchoolNameInput] = useState<string>('');
+  const [isSavingSchool, setIsSavingSchool] = useState<boolean>(false);
+
   const fetchUsersList = async () => {
     setLoading(true);
     try {
@@ -88,7 +92,34 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
 
   useEffect(() => {
     fetchUsersList();
+    
+    // Load school name setting
+    const loadSchool = async () => {
+      try {
+        const name = await dbService.getSchoolName();
+        setSchoolNameInput(name);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadSchool();
   }, []);
+
+  const handleSaveSchoolName = async () => {
+    if (!schoolNameInput.trim()) {
+      triggerToast('⚠️ الرجاء إدخال اسم مؤسسة صالح.');
+      return;
+    }
+    setIsSavingSchool(true);
+    try {
+      await dbService.saveSchoolName(schoolNameInput.trim());
+      triggerToast('✅ تم تحديث اسم المؤسسة التعليمية بنجاح!');
+    } catch (err) {
+      triggerToast('❌ حدث خطأ أثناء حفظ اسم المؤسسة.');
+    } finally {
+      setIsSavingSchool(false);
+    }
+  };
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -500,6 +531,41 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
           <div className="p-3.5 bg-emerald-50 text-emerald-600 rounded-2xl border border-emerald-100">
             <Activity className="h-6 w-6" />
           </div>
+        </div>
+      </div>
+
+      {/* Global School Identity Configuration */}
+      <div className="bg-gradient-to-r from-teal-50/50 via-sky-50/20 to-indigo-50/30 border border-sky-100/70 rounded-3xl p-6 shadow-xl shadow-sky-100/5 mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-32 h-32 bg-teal-100/20 rounded-full blur-xl pointer-events-none" />
+        <div className="space-y-1.5 text-right relative z-10 md:w-1/2">
+          <h2 className="text-sm font-black text-slate-850 flex items-center gap-1.5 leading-none">
+            <span className="p-1 px-2.5 bg-teal-100 text-teal-700 rounded-lg text-xs font-black">🏫</span>
+            <span>تخصيص اسم المؤسسة التعليمية (المدرسة)</span>
+          </h2>
+          <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+            الاسم المدخل هنا يعتمد تلقائياً ويظهر فوراً في البطاقة الشخصية لجميع تلاميذ المؤسسة وأساتذتها دون الحاجة لملئه يدوياً.
+          </p>
+        </div>
+
+        <div className="flex gap-2 w-full md:w-1/2 items-center z-10">
+          <input
+            type="text"
+            className="flex-1 px-4 py-3 bg-white border border-slate-200/80 focus:border-teal-400 focus:outline-none focus:ring-4 focus:ring-teal-100 rounded-2xl text-xs font-bold text-slate-800 transition shadow-inner text-right"
+            placeholder="مثال: مدرسة الإمام البخاري الابتدائية"
+            value={schoolNameInput}
+            onChange={(e) => setSchoolNameInput(e.target.value)}
+          />
+          <button
+            onClick={handleSaveSchoolName}
+            disabled={isSavingSchool}
+            className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-xs font-black rounded-2xl transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-500/10 shrink-0 select-none"
+          >
+            {isSavingSchool ? (
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <span>💾 حفظ الاسم</span>
+            )}
+          </button>
         </div>
       </div>
 

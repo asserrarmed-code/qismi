@@ -24,7 +24,12 @@ import {
   CalendarDays,
   FolderOpen,
   FileText,
-  FileDown
+  FileDown,
+  User,
+  School,
+  Edit,
+  Save,
+  X
 } from 'lucide-react';
 
 interface StudentDashboardProps {
@@ -127,6 +132,12 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
   const [answeredQuiz, setAnsweredQuiz] = useState<{[exerciseId: string]: { selected: string; isCorrect: boolean } }>({});
   const [isLoading, setIsLoading] = useState(true);
 
+  // Student profile states
+  const [profileDisplayName, setProfileDisplayName] = useState<string>(session.displayName || '');
+  const [schoolName, setSchoolName] = useState<string>('');
+  const [arabicTeacher, setArabicTeacher] = useState<string>('');
+  const [frenchMathTeacher, setFrenchMathTeacher] = useState<string>('');
+
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
@@ -147,15 +158,67 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         setAbsences(abData || []);
         setDocuments(docsData || []);
         setTeacherNote(note || '');
+
+        // 1. Fetch school name
+        try {
+          const sName = await dbService.getSchoolName();
+          setSchoolName(sName || 'مدرستنا الابتدائية الرقمية');
+        } catch (schoolErr) {
+          console.error("Error retrieving school name:", schoolErr);
+          setSchoolName('مدرستنا الابتدائية الرقمية');
+        }
+
+        // 2. Fetch student's own display name from profile
+        try {
+          const profile = await dbService.getStudentProfile(session.uid);
+          if (profile && profile.displayName) {
+            setProfileDisplayName(profile.displayName);
+          } else {
+            setProfileDisplayName(session.displayName || '');
+          }
+        } catch (profileErr) {
+          setProfileDisplayName(session.displayName || '');
+        }
+
+        // 3. Automatically determine teachers of this level based on assignations
+        try {
+          const teachers = await dbService.getTeachersForStudent(currentLevel);
+          const arabicT = teachers.find(t => t.subject?.includes('العربية'));
+          const frenchMathT = teachers.find(t => 
+            t.subject?.includes('الفرنسية') || 
+            t.subject?.includes('الرياضيات') || 
+            t.subject?.includes('الفرنسي') || 
+            t.subject?.includes('فرنسية') || 
+            t.subject?.toLowerCase().includes('french') || 
+            t.subject?.toLowerCase().includes('math')
+          );
+
+          if (arabicT) {
+            setArabicTeacher(arabicT.displayName || arabicT.username || 'غير محدد بعد');
+          } else {
+            setArabicTeacher('غير معين بعد من طرف الإدارة');
+          }
+
+          if (frenchMathT) {
+            setFrenchMathTeacher(frenchMathT.displayName || frenchMathT.username || 'غير محدد بعد');
+          } else {
+            setFrenchMathTeacher('غير معين بعد من طرف الإدارة');
+          }
+        } catch (teachersErr) {
+          console.error("Error fetching teachers for student profile card:", teachersErr);
+          setArabicTeacher('في انتظار التعيين');
+          setFrenchMathTeacher('في انتظار التعيين');
+        }
+
       } catch (e) {
-        console.error("خطأ أثناء استرجاع بيانات الفضاء التعليمي والملفات المنشورة:", e);
+        console.error("خطأ أثناء استرجاع بيانات الفضاء التعليمي:", e);
       } finally {
         setIsLoading(false);
       }
     };
     
     fetchData();
-  }, [currentLevel, session.uid]);
+  }, [currentLevel, session.uid, session.displayName]);
 
   // Filters the exercises by category
   const filteredExercises = exercises.filter(
@@ -186,7 +249,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
           
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-2">
             <GraduationCap className="h-8 w-8 text-amber-300 shrink-0" />
-            <span>مرحباً بك يا بطل، {session.displayName}!</span>
+            <span>مرحباً بك يا بطل، {profileDisplayName || session.displayName}!</span>
           </h1>
           
           <p className="text-xs sm:text-sm text-sky-100 font-bold flex items-center gap-2">
@@ -575,7 +638,85 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
 
         {/* Right Column: Grades and Absences */}
         <div className="lg:col-span-4 space-y-6">
-          
+
+          {/* Card: Student Identity & Profile Fields */}
+          <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative overflow-hidden">
+            <div className="absolute left-0 top-0 w-24 h-24 bg-indigo-50/50 rounded-full blur-xl pointer-events-none" />
+            <h2 className="text-sm font-black text-slate-850 pb-3 border-b border-sky-100 mb-5 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <User className="h-4.5 w-4.5" />
+                </span>
+                <span>البطاقة الشخصية والمدرسية</span>
+              </span>
+            </h2>
+
+            <div className="space-y-4">
+              {/* 1. Name */}
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-indigo-50/30 border border-indigo-50/60">
+                <div className="p-2 bg-indigo-100 text-indigo-650 rounded-xl shrink-0">
+                  <User className="h-4.5 w-4.5" />
+                </div>
+                <div className="space-y-0.5 text-right w-full">
+                  <span className="block text-[9px] font-black text-slate-400 leading-none">الاسم الكامل للتلميذ(ة):</span>
+                  <span className="text-xs font-black text-slate-800">{profileDisplayName || session.displayName}</span>
+                </div>
+              </div>
+
+              {/* 2. Level */}
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-sky-50/30 border border-sky-50/60">
+                <div className="p-2 bg-sky-100 text-sky-650 rounded-xl shrink-0">
+                  <GraduationCap className="h-4.5 w-4.5" />
+                </div>
+                <div className="space-y-0.5 text-right w-full">
+                  <span className="block text-[9px] font-black text-slate-400 leading-none">المستوى الدراسي المقيد:</span>
+                  <span className="text-xs font-black text-indigo-900">
+                    المستوى {currentLevel === '5' ? 'الخامس' : 'السادس'} ابتدائي
+                  </span>
+                </div>
+              </div>
+
+              {/* 3. School Name */}
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-amber-50/30 border border-amber-50/60">
+                <div className="p-2 bg-amber-100 text-amber-650 rounded-xl shrink-0">
+                  <School className="h-4.5 w-4.5" />
+                </div>
+                <div className="space-y-0.5 text-right w-full">
+                  <span className="block text-[9px] font-black text-slate-400 leading-none">المؤسسة التعليمية / المدرسة:</span>
+                  <span className="text-xs font-black text-slate-800 break-all">
+                    {schoolName ? schoolName : <span className="text-slate-400 italic font-bold">في انتظار التكوين من طرف الإدارة</span>}
+                  </span>
+                </div>
+              </div>
+
+              {/* 4. Arabic Teacher */}
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-emerald-50/30 border border-emerald-50/60">
+                <div className="p-2.5 bg-emerald-100 text-emerald-650 rounded-xl shrink-0 text-xs font-bold">
+                  📖
+                </div>
+                <div className="space-y-0.5 text-right w-full">
+                  <span className="block text-[9px] font-black text-slate-400 leading-none">أستاذ(ة) اللغة العربية:</span>
+                  <span className="text-xs font-black text-slate-800 break-all">
+                    {arabicTeacher}
+                  </span>
+                </div>
+              </div>
+
+              {/* 5. French and Math Teacher */}
+              <div className="flex items-center gap-3 p-3 rounded-2xl bg-rose-50/30 border border-rose-50/60">
+                <div className="p-2.5 bg-rose-100 text-rose-650 rounded-xl shrink-0 text-xs font-bold">
+                  📐
+                </div>
+                <div className="space-y-0.5 text-right w-full">
+                  <span className="block text-[9px] font-black text-slate-400 leading-none">أستاذ(ة) الفرنسية والرياضيات:</span>
+                  <span className="text-xs font-black text-slate-800 break-all">
+                    {frenchMathTeacher}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Section 1: Academic Grades / Marks */}
           <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
             <h2 className="text-xs sm:text-sm font-black text-slate-850 pb-3 border-b border-sky-100 mb-5 flex items-center gap-2">
