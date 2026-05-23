@@ -191,6 +191,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
 
   // Batch student import states for teacher
   const [showTeacherImportModal, setShowTeacherImportModal] = useState(false);
+  const [teacherImportTab, setTeacherImportTab] = useState<'file' | 'pasted'>('file');
+  const [teacherPastedNames, setTeacherPastedNames] = useState('');
   const [teacherImportLvl, setTeacherImportLvl] = useState<'5' | '6'>(() => {
     const assigned = session.assignedClasses || [];
     return assigned.includes('6') && !assigned.includes('5') ? '6' : '5';
@@ -235,6 +237,44 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     } else {
       setTeacherImportedList(parsed);
     }
+  };
+
+  const handleTeacherParsePastedNames = () => {
+    setTeacherImportError(null);
+    if (!teacherPastedNames.trim()) {
+      setTeacherImportError('الرجاء كتابة أو لصق بعض أسماء التلاميذ أولاً.');
+      return;
+    }
+    
+    const lines = teacherPastedNames.split('\n');
+    const rows: string[][] = [];
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      
+      let name = trimmed;
+      let levelValue = '';
+      if (trimmed.includes(',')) {
+        const parts = trimmed.split(',');
+        name = parts[0].trim();
+        levelValue = parts[1].trim();
+      } else if (trimmed.includes(';')) {
+        const parts = trimmed.split(';');
+        name = parts[0].trim();
+        levelValue = parts[1].trim();
+      }
+      
+      if (name) {
+        rows.push([name, levelValue]);
+      }
+    });
+
+    if (rows.length === 0) {
+      setTeacherImportError('لم نجد أي أسماء صالحة مضافة.');
+      return;
+    }
+
+    handleTeacherExcelFileLoad(rows);
   };
 
   const processTeacherFile = (file: File) => {
@@ -2681,54 +2721,45 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                   ) : (
                     <div className="overflow-hidden border border-slate-100 rounded-2xl shadow-sm bg-white">
                       <div className="overflow-x-auto">
-                        <table className="w-full text-right border-collapse text-xs">
+                        <table className="w-full text-right border-collapse">
                           <thead>
-                            <tr className="bg-slate-50/80 border-b border-slate-100 text-slate-400 font-bold">
-                              <th className="py-3 px-4 text-center">الرقم</th>
-                              <th className="py-3 px-4">الاسم الكامل للتلميذ(ة)</th>
-                              <th className="py-3 px-4 text-center">المستوى الدراسي</th>
-                              <th className="py-3 px-4">اسم المستخدم للولوج</th>
-                              <th className="py-3 px-4">الرقم السري للولوج</th>
-                              <th className="py-3 px-4 text-center">الإجراءات والمسح</th>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                              <th className="py-3 px-4 font-black">#</th>
+                              <th className="py-3 px-4 font-black">اسم التلميذ(ة)</th>
+                              <th className="py-3 px-4 font-black">المستوى الدراسي</th>
+                              <th className="py-3 px-4 font-black">اسم المستخدم للولوج</th>
+                              <th className="py-3 px-4 font-black">الرقم السري للولوج</th>
+                              <th className="py-3 px-4 font-black text-center">إجراءات الحساب</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                          <tbody className="divide-y divide-slate-50 text-xs text-slate-700">
                             {studentAccounts
                               .filter(acc => viewLevel === 'all' || acc.level === viewLevel)
                               .map((acc, index) => (
-                                <tr key={acc.id} className="hover:bg-slate-50/40 transition-colors">
-                                  <td className="py-3.5 px-4 text-center text-slate-400 font-bold font-sans">{index + 1}</td>
-                                  <td className="py-3.5 px-4">
-                                    <div className="flex items-center gap-2.5">
-                                      <div className="h-6 w-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-bold select-none">
-                                        {acc.displayName.charAt(0)}
-                                      </div>
-                                      <span className="font-bold text-slate-900">{acc.displayName}</span>
-                                    </div>
-                                  </td>
-                                  <td className="py-3.5 px-4 text-center">
-                                    <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black ${
-                                      acc.level === '5' ? 'bg-blue-50 text-blue-700' : 'bg-indigo-50 text-indigo-700'
+                                <tr key={acc.id || acc.username} className="hover:bg-slate-50/40 transition">
+                                  <td className="py-3 px-4 text-slate-400 font-bold">{index + 1}</td>
+                                  <td className="py-3 px-4 font-extrabold text-slate-900">{acc.displayName}</td>
+                                  <td className="py-3 px-4">
+                                    <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black ${
+                                      acc.level === '6' 
+                                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' 
+                                        : 'bg-blue-50 text-blue-700 border border-blue-105'
                                     }`}>
-                                      المستوى {acc.level === '5' ? 'الخامس' : 'السادس'} ابتدائي
+                                      المستوى {acc.level === '6' ? 'السادس' : 'الخامس'}
                                     </span>
                                   </td>
-                                  <td className="py-3.5 px-4 font-mono font-bold text-indigo-600">
-                                    @{acc.username}
+                                  <td className="py-3 px-4 font-mono font-bold text-slate-600">@{acc.username}</td>
+                                  <td className="py-3 px-4 font-mono font-bold text-amber-700 bg-amber-50/30">
+                                    {acc.password || `primary${acc.level}`}
                                   </td>
-                                  <td className="py-3.5 px-4 font-mono">
-                                    <span className="bg-amber-50 text-amber-800 border-b border-amber-200/50 px-2 py-0.5 rounded-lg text-[10px] font-extrabold shadow-sm">
-                                      {acc.password || 'primary' + acc.level}
-                                    </span>
-                                  </td>
-                                  <td className="py-3.5 px-4 text-center">
+                                  <td className="py-3 px-4 text-center">
                                     <button
+                                      type="button"
+                                      onClick={() => handleDeleteStudentAccount(acc.id || `uid_${acc.username}`, acc.displayName)}
                                       disabled={isDeletingAccId === acc.id}
-                                      onClick={() => handleDeleteStudentAccount(acc.id, acc.displayName)}
-                                      className="p-1 px-2.5 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg text-[10px] font-black cursor-pointer transition flex items-center gap-1 mx-auto"
+                                      className="p-1 px-2.5 bg-red-50 hover:bg-red-100 text-red-650 hover:text-red-750 font-black rounded-lg text-[10px] transition cursor-pointer"
                                     >
-                                      <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                                      <span>{isDeletingAccId === acc.id ? 'حذف...' : 'حذف'}</span>
+                                      {isDeletingAccId === acc.id ? 'جاري الحذف...' : 'حذف 🗑️'}
                                     </button>
                                   </td>
                                 </tr>
@@ -2745,66 +2776,68 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
           </div>
         )}
 
-        {/* TAB 7: PORTAL SETTINGS */}
+        {/* TAB 7: SETTINGS AND PORTAL MANAGEMENT */}
         {activeTab === 'settings' && (
           <div className="lg:col-span-12 space-y-6">
-            <div className="bg-white border border-sky-100 rounded-[28px] p-6 sm:p-8 shadow-xl shadow-sky-100/10" dir="rtl">
+            <div className="bg-white border border-sky-100 rounded-[28px] p-6 sm:p-8 shadow-xl shadow-sky-100/10">
               
               {/* Header Box */}
               <div className="pb-6 border-b border-sky-50 mb-8">
                 <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
                   <span className="p-1 px-2.5 bg-sky-100 text-sky-600 rounded-xl text-xs font-black">⚙️</span>
-                  <span>لوحة التخصيص وإعدادات البوابة المتقدمة</span>
+                  <span>إعدادات الفضاء التعليمي وهوية الأستاذ</span>
                 </h2>
                 <p className="text-xs text-slate-500 font-bold mt-1 font-sans">
-                  من هنا يمكنك تخصيص اسمك المعتمد كأستاذ، تغيير كلمة مرور الولوج الخاصة بك، والتحكم التام في إخفاء أو تصفية بيانات المعاينة للبدء في تشغيل فضاء التدريس الحقيقي.
+                  قم بتخصيص معلومات الحساب الشخصي وتفعيل نمط الفصل الحقيقي مع إدارة تصفير بيانات التجريب المعروضة.
                 </p>
               </div>
 
+              {/* Success & Error alerts */}
+              {accSuccess && (
+                <div className="bg-emerald-50 text-emerald-800 border-r-4 border-emerald-500 px-5 py-3 rounded-2xl text-xs font-extrabold flex items-center justify-between gap-2 mb-6">
+                  <span>{accSuccess}</span>
+                  <button onClick={() => setAccSuccess(null)} className="text-emerald-500 hover:text-emerald-700 font-black cursor-pointer">✕</button>
+                </div>
+              )}
+
+              {accError && (
+                <div className="bg-red-50 text-red-800 border-r-4 border-red-500 px-5 py-3 rounded-2xl text-xs font-extrabold flex items-center justify-between gap-2 mb-6">
+                  <span>{accError}</span>
+                  <button onClick={() => setAccError(null)} className="text-red-500 hover:text-red-700 font-black cursor-pointer">✕</button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
                 
-                {/* Profile Edit Column */}
-                <div className="xl:col-span-6 bg-slate-50 border border-slate-200/60 rounded-3xl p-6 space-y-5">
+                {/* Right Side: Identity update form */}
+                <div className="xl:col-span-6 bg-slate-50 border border-slate-200/65 rounded-3xl p-6 space-y-5">
                   <h3 className="text-xs sm:text-sm font-black text-slate-800 border-b border-slate-200/50 pb-3 flex items-center gap-2">
-                    <User className="h-4 w-4 text-sky-500" />
-                    <span>تخصيص الهوية الشخصية للأستاذ (أنت)</span>
+                    <span>👑</span>
+                    <span>تعديل معلومات الحساب الشخصي للأستاذ</span>
                   </h3>
 
-                  <form 
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      const form = e.target as HTMLFormElement;
-                      const dName = (form.elements.namedItem('dispName') as HTMLInputElement).value;
-                      const uName = (form.elements.namedItem('usrName') as HTMLInputElement).value;
-                      const uPass = (form.elements.namedItem('usrPass') as HTMLInputElement).value;
-                      
-                      try {
-                        await dbService.saveCustomTeacher(dName, uName, uPass);
-                        alert("تم تحديث وحفظ بيانات الأستاذ الشخصية بنجاح! يرجى استخدام المعرف السري الجديد للمرة القادمة.");
-                        // Force session state update
-                        session.displayName = dName;
-                        session.username = uName;
-                        // Refresh state
-                        loadAllData();
-                      } catch (err) {
-                        alert("حدث خطأ أثناء حفظ التعديلات.");
-                      }
-                    }} 
-                    className="space-y-4"
-                  >
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-black text-slate-700">
-                        الاسم الكامل والمحترم المعتمد للأستاذ:
-                      </label>
-                      <input
-                        type="text"
-                        name="dispName"
-                        required
-                        defaultValue={dbService.getCustomTeacher()?.displayName || session.displayName}
-                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-bold text-slate-800 transition shadow-sm"
-                      />
-                    </div>
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setAccSuccess(null);
+                    setAccError(null);
+                    const formData = new FormData(e.currentTarget);
+                    const usrName = (formData.get('usrName') as string || '').trim().toLowerCase();
+                    const usrPass = (formData.get('usrPass') as string || '').trim();
+                    const displayName = session.displayName;
 
+                    if (!usrName || !usrPass) {
+                      setAccError('الرجاء ملء جميع الحقول المطلوبة.');
+                      return;
+                    }
+
+                    try {
+                      await dbService.saveCustomTeacher(displayName, usrName, usrPass);
+                      setAccSuccess('تم حفظ وتعديل الهوية والبيانات الجديدة بنجاح! سيتم اعتمادها فوراً.');
+                    } catch (err) {
+                      setAccError('فشل في حفظ البيانات الجديدة. يرجى تكرار المحاولة.');
+                    }
+                  }} className="space-y-4">
+                    
                     <div className="space-y-1.5">
                       <label className="block text-xs font-black text-slate-700">
                         اسم المستخدم الخاص بك للولوج (username):
@@ -2840,10 +2873,10 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                   </form>
                 </div>
 
-                {/* Live Mode Controls Column */}
+                {/* Left Side: Live Mode Controls */}
                 <div className="xl:col-span-6 bg-slate-50 border border-slate-200/60 rounded-3xl p-6 space-y-6">
                   <h3 className="text-xs sm:text-sm font-black text-slate-800 border-b border-slate-200/50 pb-3 flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-emerald-500" />
+                    <span className="p-1 px-2.5 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black">⚙️</span>
                     <span>التحكم في بيانات المعاينة ونمط الفصل النظيف</span>
                   </h3>
 
@@ -2884,7 +2917,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     {/* Reset Button */}
                     <div className="bg-red-50/50 border border-red-100 rounded-2xl p-4 space-y-3">
                       <span className="block text-[11px] font-black text-red-700 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
                         تصفية كليّة فورية للفضاء
                       </span>
                       <p className="text-[10px] text-slate-550 font-bold leading-normal">
@@ -2901,7 +2934,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         }}
                         className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-black cursor-pointer transition flex items-center justify-center gap-1 shadow-sm"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 shrink-0" />
                         <span>تطهير فوري وبدء التدريس الحقيقي</span>
                       </button>
                     </div>
@@ -2913,6 +2946,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
             </div>
           </div>
         )}
+
       {showTeacherImportModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4">
           <motion.div 
@@ -2925,8 +2959,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
               <div className="flex items-center gap-2.5">
                 <span className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">📥</span>
                 <div>
-                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 font-sans">استيراد وتوليد حسابات التلاميذ من ملف Excel</h3>
-                  <p className="text-[10px] sm:text-xs text-slate-400 font-bold">الرجاء رفع ملف يحتوي على قائمة أسماء تلاميذك لتوليد حساباتهم دفعة واحدة.</p>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 font-sans">استيراد وتوليد حسابات التلاميذ من ملف Excel أو الكتابة اليدوية</h3>
+                  <p className="text-[10px] sm:text-xs text-slate-400 font-bold">الرجاء رفع ملف يحتوي على قائمة أسماء تلاميذك أو كتابتها لتوليد حساباتهم دفعة واحدة.</p>
                 </div>
               </div>
               <button 
@@ -2945,6 +2979,34 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
               <div className="bg-red-50 text-red-800 border-r-4 border-red-500 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
                 <span>{teacherImportError}</span>
+              </div>
+            )}
+
+            {/* Tab switches */}
+            {teacherImportedList.length === 0 && (
+              <div className="flex border-b border-slate-150 mb-4">
+                <button
+                  type="button"
+                  onClick={() => { setTeacherImportTab('file'); setTeacherImportError(null); }}
+                  className={`flex-1 pb-2.5 text-xs font-black transition-all cursor-pointer ${
+                    teacherImportTab === 'file'
+                      ? 'border-b-2 border-indigo-500 text-indigo-650'
+                      : 'text-slate-400 hover:text-slate-650'
+                  }`}
+                >
+                  📥 استيراد ملف Excel أو CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setTeacherImportTab('pasted'); setTeacherImportError(null); }}
+                  className={`flex-1 pb-2.5 text-xs font-black transition-all cursor-pointer ${
+                    teacherImportTab === 'pasted'
+                      ? 'border-b-2 border-indigo-500 text-indigo-650'
+                      : 'text-slate-400 hover:text-slate-650'
+                  }`}
+                >
+                  ✍️ لصق قائمة الأسماء يدوياً
+                </button>
               </div>
             )}
 
@@ -2993,38 +3055,68 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
               </div>
             </div>
 
-            {/* Step 2: Upload Arena */}
-            <div className="space-y-2">
-              <label className="block text-xs font-black text-slate-800">
-                2. اختر ملف جدول البيانات (Excel / CSV):
-              </label>
-              <div 
-                className="border-2 border-dashed border-slate-201 hover:border-indigo-400 bg-slate-50/50 hover:bg-indigo-50/15 rounded-3xl p-8 transition-all flex flex-col items-center justify-center text-center cursor-pointer relative"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                    processTeacherFile(e.dataTransfer.files[0]);
-                  }
-                }}
-                onClick={() => document.getElementById('teacher_excel_picker')?.click()}
-              >
-                <input
-                  type="file"
-                  id="teacher_excel_picker"
-                  accept=".xlsx, .xls, .csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      processTeacherFile(e.target.files[0]);
-                    }
-                  }}
-                />
-                <span className="text-3xl mb-3">📋</span>
-                <p className="text-xs font-black text-slate-700">اسحب وألقِ ملف Excel هنا، أو انقر للتصفح واختياره</p>
-                <p className="text-[10px] text-slate-400 mt-1 font-bold">ملاحظة: يجب أن يحتوي العمود الأول من الملف على الاسماء الكاملة للتلاميذ</p>
-              </div>
-            </div>
+            {teacherImportedList.length === 0 && (
+              teacherImportTab === 'file' ? (
+                /* Step 2: Upload Arena */
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-slate-800">
+                      2. اختر ملف جدول البيانات (Excel / CSV):
+                    </label>
+                    <div 
+                      className="border-2 border-dashed border-slate-201 hover:border-indigo-400 bg-slate-50/50 hover:bg-indigo-50/15 rounded-3xl p-8 transition-all flex flex-col items-center justify-center text-center cursor-pointer relative"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          processTeacherFile(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      onClick={() => document.getElementById('teacher_excel_picker')?.click()}
+                    >
+                      <input
+                        type="file"
+                        id="teacher_excel_picker"
+                        accept=".xlsx, .xls, .csv"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            processTeacherFile(e.target.files[0]);
+                          }
+                        }}
+                      />
+                      <span className="text-3xl mb-3">📋</span>
+                      <p className="text-xs font-black text-slate-700">اسحب وألقِ ملف Excel هنا، أو انقر للتصفح واختياره</p>
+                      <p className="text-[10px] text-slate-400 mt-1 font-bold">ملاحظة: يجب أن يحتوي العمود الأول من الملف على الاسماء الكاملة للتلاميذ</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Step 2: Paste Arena */
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-slate-850">
+                      2. اكتب أو الصق لائحة أسماء القسم هنا (اسم في كل سطر):
+                    </label>
+                    <textarea
+                      rows={6}
+                      value={teacherPastedNames}
+                      onChange={(e) => setTeacherPastedNames(e.target.value)}
+                      placeholder="أحمد الصقلي&#10;مريم العلمي&#10;جمال بن عمر"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100/50 text-xs font-bold text-slate-800 transition shadow-inner font-sans text-right"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleTeacherParsePastedNames}
+                    className="w-full py-3.5 bg-gradient-to-r from-indigo-500 to-indigo-650 hover:from-indigo-600 hover:to-indigo-700 text-white font-extrabold rounded-2xl text-xs transition-all shadow-md shadow-indigo-500/10 cursor-pointer"
+                  >
+                    🔮 توليد كلمات المرور وأسماء المستخدمين جماعة للقسم كله 🚀
+                  </button>
+                </div>
+              )
+            )}
 
             {/* Step 3: Parsed Output Review table */}
             {teacherImportedList.length > 0 && (
@@ -3038,7 +3130,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     onClick={() => setTeacherImportedList([])}
                     className="text-red-500 hover:text-red-700 text-[10px] font-black cursor-pointer"
                   >
-                    إفراغ وتغيير الملف
+                    إفراغ وتغيير القائمة
                   </button>
                 </div>
 
@@ -3077,7 +3169,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 }}
                 className="px-5 py-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-2xl text-xs font-black cursor-pointer min-w-28 transition"
               >
-                إلغاء الخروج
+                إلغاء
               </button>
               
               <button

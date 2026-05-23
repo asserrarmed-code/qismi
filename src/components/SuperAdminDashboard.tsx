@@ -64,6 +64,8 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
 
   // CSV Import States
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importSourceTab, setImportSourceTab] = useState<'file' | 'pasted'>('file');
+  const [pastedNames, setPastedNames] = useState('');
   const [importFileError, setImportFileError] = useState<string | null>(null);
   const [importedList, setImportedList] = useState<any[]>([]);
   const [defaultImportLevel, setDefaultImportLevel] = useState<'5' | '6'>('5');
@@ -277,6 +279,44 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
     if (file) {
       processFile(file);
     }
+  };
+  
+  const handleParsePastedNames = () => {
+    setImportFileError(null);
+    if (!pastedNames.trim()) {
+      setImportFileError('الرجاء كتابة أو لصق بعض أسماء التلاميذ أولاً.');
+      return;
+    }
+    
+    const lines = pastedNames.split('\n');
+    const rows: string[][] = [];
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      
+      let name = trimmed;
+      let levelValue = '';
+      if (trimmed.includes(',')) {
+        const parts = trimmed.split(',');
+        name = parts[0].trim();
+        levelValue = parts[1].trim();
+      } else if (trimmed.includes(';')) {
+        const parts = trimmed.split(';');
+        name = parts[0].trim();
+        levelValue = parts[1].trim();
+      }
+      
+      if (name) {
+        rows.push([name, levelValue]);
+      }
+    });
+
+    if (rows.length === 0) {
+      setImportFileError('لم نجد أي أسماء صالحة مضافة.');
+      return;
+    }
+
+    handleExcelFileLoad(rows);
   };
 
   const processFile = (file: File) => {
@@ -1172,68 +1212,156 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
 
               {importedList.length === 0 ? (
                 <div className="space-y-5">
-                  <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl text-xs text-slate-700 leading-relaxed font-sans space-y-1.5">
-                    <p className="font-extrabold text-emerald-950">💡 إرشادات صياغة ملف Excel / CSV للتلاميذ:</p>
-                    <p>1. قم بصياغة ملف Excel عادي بامتداد <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.xlsx</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.xls</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.csv</code>.</p>
-                    <p>2. اكتب في العمود الأول: <code className="bg-emerald-100/60 px-1.5 py-0.5 rounded text-emerald-800 text-[10px] font-mono">الاسم الكامل للتلميذ</code> وفي العمود الثاني اختيارياً المستوى كـ <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">5</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">6</code> (في حال لم يتم تحديد عمود المستوى سيتم تطبيق المستوى الافتراضي المجموع بالأسفل على كافة الأسماء المستوردة).</p>
-                    <p>3. صياغة نموذجية في جدول البيانات:</p>
-                    <pre className="bg-slate-900 text-slate-200 p-2.5 rounded-xl text-[10px] font-mono leading-normal text-left" dir="ltr">
+                  {/* Tab switches */}
+                  <div className="flex border-b border-slate-100 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => { setImportSourceTab('file'); setImportFileError(null); }}
+                      className={`flex-1 pb-2.5 text-xs font-black transition-all ${
+                        importSourceTab === 'file'
+                          ? 'border-b-2 border-emerald-500 text-emerald-600'
+                          : 'text-slate-400 hover:text-slate-650'
+                      }`}
+                    >
+                      📥 استيراد ملف Excel أو CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setImportSourceTab('pasted'); setImportFileError(null); }}
+                      className={`flex-1 pb-2.5 text-xs font-black transition-all ${
+                        importSourceTab === 'pasted'
+                          ? 'border-b-2 border-emerald-500 text-emerald-600'
+                          : 'text-slate-400 hover:text-slate-650'
+                      }`}
+                    >
+                      ✍️ لصق قائمة الأسماء يدوياً
+                    </button>
+                  </div>
+
+                  {importSourceTab === 'file' ? (
+                    <div className="space-y-5">
+                      <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl text-xs text-slate-700 leading-relaxed font-sans space-y-1.5">
+                        <p className="font-extrabold text-emerald-950">💡 إرشادات صياغة ملف Excel / CSV للتلاميذ:</p>
+                        <p>1. قم بصياغة ملف Excel عادي بامتداد <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.xlsx</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.xls</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.csv</code>.</p>
+                        <p>2. اكتب في العمود الأول: <code className="bg-emerald-100/60 px-1.5 py-0.5 rounded text-emerald-800 text-[10px] font-mono">الاسم الكامل للتلميذ</code> وفي العمود الثاني اختيارياً المستوى كـ <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">5</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">6</code> (في حال لم يتم تحديد عمود المستوى سيتم تطبيق المستوى الافتراضي المجموع بالأسفل على كافة الأسماء المستوردة).</p>
+                        <p>3. صياغة نموذجية في جدول البيانات:</p>
+                        <pre className="bg-slate-900 text-slate-200 p-2.5 rounded-xl text-[10px] font-mono leading-normal text-left" dir="ltr">
 {`الاسم الكامل,المستوى
 علي العلمي,5
 سعاد الفاسي,6
 أنس التازي`}
-                    </pre>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-700">المستوى الدراسي الافتراضي (في حالة لم يحدد بالملف):</label>
-                    <div className="flex items-center gap-4">
-                      <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="import_def_lvl"
-                          value="5"
-                          checked={defaultImportLevel === '5'}
-                          onChange={() => setDefaultImportLevel('5')}
-                          className="h-4 w-4 text-emerald-500 border-slate-300"
-                        />
-                        <span>المستوى الخامس ابتدائي</span>
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="import_def_lvl"
-                          value="6"
-                          checked={defaultImportLevel === '6'}
-                          onChange={() => setDefaultImportLevel('6')}
-                          className="h-4 w-4 text-emerald-500 border-slate-300"
-                        />
-                        <span>المستوى السادس ابتدائي</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Drag and Drop Zone */}
-                  <div 
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={handleFileDrop}
-                    className="border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/10 hover:bg-emerald-50/25 p-10 rounded-[22px] text-center cursor-pointer transition-all duration-300 group"
-                  >
-                    <input 
-                      type="file" 
-                      id="xlsx-file-uploader" 
-                      accept=".xlsx,.xls,.csv"
-                      className="hidden" 
-                      onChange={handleFileSelect}
-                    />
-                    <label htmlFor="xlsx-file-uploader" className="cursor-pointer space-y-3 block">
-                      <UploadCloud className="h-10 w-10 text-emerald-400 mx-auto group-hover:scale-110 transition-transform duration-300" />
-                      <div>
-                        <p className="text-xs font-black text-slate-800">اسحب وأفلت ملف Excel أو CSV الخاص بالتلاميذ هنا 📂</p>
-                        <p className="text-[10px] font-bold text-slate-400 mt-1">أو انقر لتصفح واختيار ملف اللائحة من جهازك</p>
+                        </pre>
                       </div>
-                    </label>
-                  </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-black text-slate-700">المستوى الدراسي الافتراضي (في حالة لم يحدد بالملف):</label>
+                        <div className="flex items-center gap-4">
+                          <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="import_def_lvl"
+                              value="5"
+                              checked={defaultImportLevel === '5'}
+                              onChange={() => setDefaultImportLevel('5')}
+                              className="h-4 w-4 text-emerald-500 border-slate-300"
+                            />
+                            <span>المستوى الخامس ابتدائي</span>
+                          </label>
+                          <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="import_def_lvl"
+                              value="6"
+                              checked={defaultImportLevel === '6'}
+                              onChange={() => setDefaultImportLevel('6')}
+                              className="h-4 w-4 text-emerald-500 border-slate-300"
+                            />
+                            <span>المستوى السادس ابتدائي</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Drag and Drop Zone */}
+                      <div 
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={handleFileDrop}
+                        className="border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/10 hover:bg-emerald-50/25 p-10 rounded-[22px] text-center cursor-pointer transition-all duration-300 group"
+                      >
+                        <input 
+                          type="file" 
+                          id="xlsx-file-uploader" 
+                          accept=".xlsx,.xls,.csv"
+                          className="hidden" 
+                          onChange={handleFileSelect}
+                        />
+                        <label htmlFor="xlsx-file-uploader" className="cursor-pointer space-y-3 block">
+                          <UploadCloud className="h-10 w-10 text-emerald-400 mx-auto group-hover:scale-110 transition-transform duration-300" />
+                          <div>
+                            <p className="text-xs font-black text-slate-800">اسحب وأفلت ملف Excel أو CSV الخاص بالتلاميذ هنا 📂</p>
+                            <p className="text-[10px] font-bold text-slate-400 mt-1">أو انقر لتصفح واختيار ملف اللائحة من جهازك</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl text-xs text-slate-700 leading-relaxed font-sans space-y-1.5">
+                        <p className="font-extrabold text-emerald-950">💡 إرشادات كتابة ولصق أسماء تلاميذ القسم:</p>
+                        <p>1. قم بكتابة أو لصق الأسماء مباشرة في مربع الكتابة بالأسفل.</p>
+                        <p>2. ضع كل تلميذ في سطر منفرد.</p>
+                        <p>3. يمكنك اختيارياً فصل الاسم عن المستوى بفاصلة (مثال: <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">سمير العلمي, 6</code>) وفي حالة عدم كتابة المستوى سيتم إخضاع التلميذ للمستوى الافتراضي المحدد.</p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-black text-slate-700">المستوى الدراسي الافتراضي للأسماء المدخلة:</label>
+                        <div className="flex items-center gap-4">
+                          <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="import_def_lvl"
+                              value="5"
+                              checked={defaultImportLevel === '5'}
+                              onChange={() => setDefaultImportLevel('5')}
+                              className="h-4 w-4 text-emerald-500 border-slate-300"
+                            />
+                            <span>المستوى الخامس ابتدائي</span>
+                          </label>
+                          <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="import_def_lvl"
+                              value="6"
+                              checked={defaultImportLevel === '6'}
+                              onChange={() => setDefaultImportLevel('6')}
+                              className="h-4 w-4 text-emerald-500 border-slate-300"
+                            />
+                            <span>المستوى السادس ابتدائي</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-xs font-black text-slate-850">
+                          اكتب أو الصق لائحة أسماء القسم هنا (اسم في كل سطر):
+                        </label>
+                        <textarea
+                          rows={6}
+                          value={pastedNames}
+                          onChange={(e) => setPastedNames(e.target.value)}
+                          placeholder={`أحمد الصقلي&#10;مريم العلمي&#10;جمال بن عمر`}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100/50 text-xs font-bold text-slate-800 transition shadow-inner font-sans"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleParsePastedNames}
+                        className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-2xl text-xs transition-all shadow-md shadow-emerald-500/10 cursor-pointer"
+                      >
+                        🔮 توليد كلمات المرور وأسماء المستخدمين جماعة للقسم كله 🚀
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4 font-sans">
