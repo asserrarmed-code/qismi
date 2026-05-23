@@ -13,6 +13,7 @@ import {
   where, 
   orderBy,
   getDocFromServer,
+  getDocsFromServer,
   setDoc,
   getDoc
 } from 'firebase/firestore';
@@ -303,7 +304,12 @@ export const dbService = {
         // Auto-seed default superadmin into Firestore if first-time empty login
         if (trimmedUsername === 'superadmin') {
           const docRef = doc(db, 'users', 'uid_superadmin');
-          const checkDoc = await getDoc(docRef);
+          let checkDoc;
+          try {
+            checkDoc = await getDocFromServer(docRef);
+          } catch {
+            checkDoc = await getDoc(docRef);
+          }
           if (!checkDoc.exists()) {
             await setDoc(docRef, {
               username: 'superadmin',
@@ -316,15 +322,22 @@ export const dbService = {
           }
         }
 
-        // Query database directly for this exact user
+        // Query database directly for this exact user using getDocsFromServer to force refresh (bypass cache)
         const q = query(collection(db, 'users'), where('username', '==', trimmedUsername));
-        const snapshot = await getDocs(q);
+        const snapshot = await getDocsFromServer(q);
         
         if (!snapshot.empty) {
           const userDoc = snapshot.docs[0];
           const userData = userDoc.data();
           
           if (userData.password === password) {
+            // Check if role is missing or corrupt/invalid in Firestore
+            const validRoles = ['superadmin', 'teacher', 'student'];
+            const roleVal = userData.role ? String(userData.role).trim().toLowerCase() : '';
+            if (!roleVal || !validRoles.includes(roleVal)) {
+              throw new Error("بيانات الحساب غير مكتملة، يرجى تحديث بيانات هذا المستخدم");
+            }
+
             let userRole: UserRole = UserRole.TEACHER;
             if (userData.role === 'superadmin' || userData.role === UserRole.SUPERADMIN) {
               userRole = UserRole.SUPERADMIN;
@@ -347,7 +360,10 @@ export const dbService = {
             return session;
           }
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err instanceof Error && err.message === 'بيانات الحساب غير مكتملة، يرجى تحديث بيانات هذا المستخدم') {
+          throw err;
+        }
         console.warn("Secure Firebase login check encountered error; attempting local fallback:", err);
       }
     }
@@ -399,6 +415,13 @@ export const dbService = {
     }
 
     if (localMatched) {
+      // Check if role is missing or corrupt in Local Storage fallback
+      const validRoles = ['superadmin', 'teacher', 'student'];
+      const roleVal = localMatched.role ? String(localMatched.role).trim().toLowerCase() : '';
+      if (!roleVal || !validRoles.includes(roleVal)) {
+        throw new Error("بيانات الحساب غير مكتملة، يرجى تحديث بيانات هذا المستخدم");
+      }
+
       let userRole: UserRole = UserRole.TEACHER;
       if (localMatched.role === 'superadmin' || localMatched.role === UserRole.SUPERADMIN) {
         userRole = UserRole.SUPERADMIN;
