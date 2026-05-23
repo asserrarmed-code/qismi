@@ -5,6 +5,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 import { dbService } from '../lib/dbService';
 import { UserSession, UserRole } from '../types';
 import { 
@@ -211,35 +212,32 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
     return result || 'student';
   };
 
-  const handleCsvFileLoad = (text: string) => {
+  const handleExcelFileLoad = (rows: any[][]) => {
     setImportFileError(null);
-    const lines = text.split(/\r?\n/);
     const parsed: any[] = [];
     
-    lines.forEach((line) => {
-      const val = line.trim();
-      if (!val) return;
+    rows.forEach((row) => {
+      if (!row || row.length === 0) return;
       
-      const cols = val.split(/[;,]/).map(c => c.replace(/^["']|["']$/g, '').trim());
-      if (cols.length === 0 || !cols[0]) return;
+      const displayName = String(row[0] || '').trim();
+      if (!displayName) return;
       
-      let displayName = cols[0];
+      // Skip common excel headings
+      const lowerHeader = displayName.toLowerCase();
+      if (lowerHeader === 'name' || lowerHeader === 'displayname' || lowerHeader === 'الاسم' || lowerHeader === 'اسم التلميذ' || lowerHeader === 'الاسم الكامل') {
+        return;
+      }
+      
       let level: '5' | '6' = defaultImportLevel;
       
       // If there is an explicit level column
-      if (cols.length > 1) {
-        const customLvlStr = cols[1];
+      if (row.length > 1) {
+        const customLvlStr = String(row[1]).trim();
         if (customLvlStr.includes('6')) {
           level = '6';
         } else if (customLvlStr.includes('5')) {
           level = '5';
         }
-      }
-      
-      // Skip common CSV headers
-      const lowerHeader = displayName.toLowerCase();
-      if (lowerHeader === 'name' || lowerHeader === 'displayName' || lowerHeader === 'الاسم' || lowerHeader === 'اسم التلميذ' || lowerHeader === 'الاسم الكامل') {
-        return;
       }
       
       // Generate clean username prefix from English transliteration of their name
@@ -282,12 +280,21 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
   };
 
   const processFile = (file: File) => {
+    setImportFileError(null);
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const text = evt.target?.result as string;
-      handleCsvFileLoad(text);
+      try {
+        const arrayBuffer = evt.target?.result as ArrayBuffer;
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+        handleExcelFileLoad(rows);
+      } catch (err: any) {
+        setImportFileError('عذراً، حدث خطأ أثناء قراءة وتحليل ملف Excel/CSV: ' + err.message);
+      }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleConfirmImport = async () => {
@@ -1145,7 +1152,7 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
               <div className="flex items-center justify-between pb-4 border-b border-emerald-50 mb-6 font-sans">
                 <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
                   <FileUp className="h-5 w-5 text-emerald-500" />
-                  <span>رفع واستيراد لائحة التلاميذ دفعة واحدة (CSV) 📊</span>
+                  <span>رفع واستيراد لائحة التلاميذ دفعة واحدة (Excel / CSV) 📊</span>
                 </h3>
                 <button 
                   disabled={isImporting}
@@ -1166,10 +1173,10 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
               {importedList.length === 0 ? (
                 <div className="space-y-5">
                   <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl text-xs text-slate-700 leading-relaxed font-sans space-y-1.5">
-                    <p className="font-extrabold text-emerald-950">💡 إرشادات صياغة ملف CSV للتلاميذ:</p>
-                    <p>1. قم بصياغة ملف نصّي عادي بامتداد <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.csv</code>.</p>
-                    <p>2. اكتب في كل سطر: <code className="bg-emerald-100/60 px-1.5 py-0.5 rounded text-emerald-800 text-[10px] font-mono">اسم التلميذ,المستوى</code> (أو فقط اسم التلميذ بمفرده ليعتمد المستوى الافتراضي المحدد بالأسفل).</p>
-                    <p>3. صياغة نموذجية:</p>
+                    <p className="font-extrabold text-emerald-950">💡 إرشادات صياغة ملف Excel / CSV للتلاميذ:</p>
+                    <p>1. قم بصياغة ملف Excel عادي بامتداد <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.xlsx</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.xls</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">.csv</code>.</p>
+                    <p>2. اكتب في العمود الأول: <code className="bg-emerald-100/60 px-1.5 py-0.5 rounded text-emerald-800 text-[10px] font-mono">الاسم الكامل للتلميذ</code> وفي العمود الثاني اختيارياً المستوى كـ <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">5</code> أو <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-emerald-800 text-[10px] font-mono">6</code> (في حال لم يتم تحديد عمود المستوى سيتم تطبيق المستوى الافتراضي المجموع بالأسفل على كافة الأسماء المستوردة).</p>
+                    <p>3. صياغة نموذجية في جدول البيانات:</p>
                     <pre className="bg-slate-900 text-slate-200 p-2.5 rounded-xl text-[10px] font-mono leading-normal text-left" dir="ltr">
 {`الاسم الكامل,المستوى
 علي العلمي,5
@@ -1179,7 +1186,7 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-black text-slate-705 text-slate-700">المستوى الدراسي الافتراضي (في حالة لم يحدد بالملف):</label>
+                    <label className="block text-xs font-black text-slate-700">المستوى الدراسي الافتراضي (في حالة لم يحدد بالملف):</label>
                     <div className="flex items-center gap-4">
                       <label className="inline-flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
                         <input
@@ -1214,16 +1221,16 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
                   >
                     <input 
                       type="file" 
-                      id="csv-file-uploader" 
-                      accept=".csv,.txt"
+                      id="xlsx-file-uploader" 
+                      accept=".xlsx,.xls,.csv"
                       className="hidden" 
                       onChange={handleFileSelect}
                     />
-                    <label htmlFor="csv-file-uploader" className="cursor-pointer space-y-3 block">
+                    <label htmlFor="xlsx-file-uploader" className="cursor-pointer space-y-3 block">
                       <UploadCloud className="h-10 w-10 text-emerald-400 mx-auto group-hover:scale-110 transition-transform duration-300" />
                       <div>
-                        <p className="text-xs font-black text-slate-800">اسحب وأفلت ملف CSV الخاص بالتلاميذ هنا 📂</p>
-                        <p className="text-[10px] font-bold text-slate-400 mt-1">أو انقر لتصفح واختيار اللائحة من جهازك</p>
+                        <p className="text-xs font-black text-slate-800">اسحب وأفلت ملف Excel أو CSV الخاص بالتلاميذ هنا 📂</p>
+                        <p className="text-[10px] font-bold text-slate-400 mt-1">أو انقر لتصفح واختيار ملف اللائحة من جهازك</p>
                       </div>
                     </label>
                   </div>

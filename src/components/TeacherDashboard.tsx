@@ -4,7 +4,8 @@
  */
 
 import { useState, useEffect, FormEvent } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 import { dbService } from '../lib/dbService';
 import { UserSession, Exercise, Score, Absence, EduDocument } from '../types';
 import { 
@@ -49,13 +50,19 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   // Exercises States
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [exerciseText, setExerciseText] = useState('');
-  const [exerciseLevel, setExerciseLevel] = useState<'5' | '6'>('5');
+  const [exerciseLevel, setExerciseLevel] = useState<'5' | '6'>(() => {
+    const assigned = session.assignedClasses || [];
+    return assigned.includes('6') && !assigned.includes('5') ? '6' : '5';
+  });
   const [exerciseCategory, setExerciseCategory] = useState<'تمرين' | 'فرض' | 'مراقبة مستمرة'>('تمرين');
   const [exerciseError, setExerciseError] = useState<string | null>(null);
   const [exerciseSuccess, setExerciseSuccess] = useState<string | null>(null);
 
   // AI Question Generator States
-  const [aiLevel, setAiLevel] = useState<'5' | '6'>('5');
+  const [aiLevel, setAiLevel] = useState<'5' | '6'>(() => {
+    const assigned = session.assignedClasses || [];
+    return assigned.includes('6') && !assigned.includes('5') ? '6' : '5';
+  });
   const [aiComponent, setAiComponent] = useState<string>('التراكيب');
   const [aiLanguage, setAiLanguage] = useState<'auto' | 'ar_vocalized' | 'fr'>('auto');
   const [aiLessonName, setAiLessonName] = useState('');
@@ -73,8 +80,13 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   // Scores States
   const [scores, setScores] = useState<Score[]>([]);
   const [scoreStudentName, setScoreStudentName] = useState('');
-  const [scoreLevel, setScoreLevel] = useState<'5' | '6'>('5');
-  const [scoreSubject, setScoreSubject] = useState('');
+  const [scoreLevel, setScoreLevel] = useState<'5' | '6'>(() => {
+    const assigned = session.assignedClasses || [];
+    return assigned.includes('6') && !assigned.includes('5') ? '6' : '5';
+  });
+  const [scoreSubject, setScoreSubject] = useState(() => {
+    return session.subject || '';
+  });
   const [scoreValue, setScoreValue] = useState('');
   const [scoreType, setScoreType] = useState<'نقطة المراقبة المستمرة' | 'الفرض'>('نقطة المراقبة المستمرة');
   const [scoreError, setScoreError] = useState<string | null>(null);
@@ -83,7 +95,10 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   // Absences States
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [absenceStudentName, setAbsenceStudentName] = useState('');
-  const [absenceLevel, setAbsenceLevel] = useState<'5' | '6'>('5');
+  const [absenceLevel, setAbsenceLevel] = useState<'5' | '6'>(() => {
+    const assigned = session.assignedClasses || [];
+    return assigned.includes('6') && !assigned.includes('5') ? '6' : '5';
+  });
   const [absenceDate, setAbsenceDate] = useState(new Date().toISOString().substring(0, 10));
   const [absenceType, setAbsenceType] = useState<'غياب مبرر' | 'غياب غير مبرر'>('غياب غير مبرر');
   const [absenceError, setAbsenceError] = useState<string | null>(null);
@@ -92,14 +107,23 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   // Documents States
   const [documents, setDocuments] = useState<EduDocument[]>([]);
   const [docFile, setDocFile] = useState<File | null>(null);
-  const [docLevel, setDocLevel] = useState<'5' | '6'>('5');
+  const [docLevel, setDocLevel] = useState<'5' | '6'>(() => {
+    const assigned = session.assignedClasses || [];
+    return assigned.includes('6') && !assigned.includes('5') ? '6' : '5';
+  });
   const [docFileType, setDocFileType] = useState('وثيقة تربوية');
   const [docError, setDocError] = useState<string | null>(null);
   const [docSuccess, setDocSuccess] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   // General Filter
-  const [viewLevel, setViewLevel] = useState<'all' | '5' | '6'>('all');
+  const [viewLevel, setViewLevel] = useState<'all' | '5' | '6'>(() => {
+    const assigned = session.assignedClasses || [];
+    if (assigned.length === 1) {
+      return assigned[0] as '5' | '6';
+    }
+    return 'all';
+  });
   const [activeTab, setActiveTab] = useState<'exercises' | 'scores' | 'absences' | 'documents' | 'notes' | 'accounts' | 'settings'>('exercises');
 
   const [isLoading, setIsLoading] = useState(true);
@@ -115,7 +139,10 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   // Dynamic Student Account States
   const [studentAccounts, setStudentAccounts] = useState<any[]>([]);
   const [newAccName, setNewAccName] = useState('');
-  const [newAccLevel, setNewAccLevel] = useState<'5' | '6'>('5');
+  const [newAccLevel, setNewAccLevel] = useState<'5' | '6'>(() => {
+    const assigned = session.assignedClasses || [];
+    return assigned.includes('6') && !assigned.includes('5') ? '6' : '5';
+  });
   const [newAccUsername, setNewAccUsername] = useState('');
   const [newAccPassword, setNewAccPassword] = useState('');
   const [accSuccess, setAccSuccess] = useState<string | null>(null);
@@ -160,6 +187,114 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       pass += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return pass;
+  };
+
+  // Batch student import states for teacher
+  const [showTeacherImportModal, setShowTeacherImportModal] = useState(false);
+  const [teacherImportLvl, setTeacherImportLvl] = useState<'5' | '6'>(() => {
+    const assigned = session.assignedClasses || [];
+    return assigned.includes('6') && !assigned.includes('5') ? '6' : '5';
+  });
+  const [teacherImportedList, setTeacherImportedList] = useState<any[]>([]);
+  const [teacherImportError, setTeacherImportError] = useState<string | null>(null);
+  const [teacherIsImporting, setTeacherIsImporting] = useState(false);
+
+  const handleTeacherExcelFileLoad = (rows: any[][]) => {
+    setTeacherImportError(null);
+    const parsed: any[] = [];
+    
+    rows.forEach((row) => {
+      if (!row || row.length === 0) return;
+      
+      const displayName = String(row[0] || '').trim();
+      if (!displayName) return;
+      
+      // Skip common excel headings
+      const lowerHeader = displayName.toLowerCase();
+      if (lowerHeader === 'name' || lowerHeader === 'displayname' || lowerHeader === 'الاسم' || lowerHeader === 'اسم التلميذ' || lowerHeader === 'الاسم الكامل') {
+        return;
+      }
+      
+      // Since teacher has specific assigned level, we assign teacherImportLvl
+      const level = teacherImportLvl;
+      
+      const generatedUsername = generateUsernameFromName(displayName);
+      const generatedPassword = generateRandomPassword();
+      
+      parsed.push({
+        displayName,
+        username: generatedUsername,
+        password: generatedPassword,
+        level,
+        role: 'student'
+      });
+    });
+    
+    if (parsed.length === 0) {
+      setTeacherImportError('عذراً، لم نعثر على أي أسماء تلاميذ صالحة داخل الملف المرفوع. الرجاء التحقق من صياغته.');
+    } else {
+      setTeacherImportedList(parsed);
+    }
+  };
+
+  const processTeacherFile = (file: File) => {
+    setTeacherImportError(null);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const arrayBuffer = evt.target?.result as ArrayBuffer;
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+        handleTeacherExcelFileLoad(rows);
+      } catch (err: any) {
+        setTeacherImportError('عذراً، حدث خطأ أثناء قراءة وتحليل ملف Excel/CSV: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleTeacherConfirmImport = async () => {
+    if (teacherImportedList.length === 0) return;
+    setTeacherIsImporting(true);
+    setTeacherImportError(null);
+    
+    let successCount = 0;
+    try {
+      const addedList: any[] = [];
+      const addedNotes: any[] = [];
+
+      for (const item of teacherImportedList) {
+        const added = await dbService.addStudentAccount(
+          item.displayName,
+          item.level,
+          item.username,
+          item.password
+        );
+        addedList.push(added);
+        addedNotes.push({
+          id: added.id,
+          username: added.username,
+          displayName: added.displayName,
+          level: added.level,
+          notes: ''
+        });
+        successCount++;
+      }
+      
+      // Refresh local Lists immediately without full reload
+      setStudentAccounts(prev => [...addedList, ...prev]);
+      setStudentNotes(prev => [...addedNotes, ...prev]);
+      
+      setShowTeacherImportModal(false);
+      setTeacherImportedList([]);
+      setAccSuccess(`🎉 تم بنجاح استيراد وتوليد حسابات لـ (${successCount}) من تلاميذك دفعة واحدة!`);
+    } catch (err: any) {
+      setTeacherImportError('حدث خطأ أثناء رفع الحسابات: ' + err.message);
+    } finally {
+      setTeacherIsImporting(false);
+    }
   };
 
   // Auto populate credentials as teacher types student name
@@ -571,7 +706,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       let accountsData: any[] = [];
       try {
         notesData = await dbService.getStudentNotes();
-        accountsData = await dbService.getStudentAccounts();
+        accountsData = await dbService.getStudentsForTeacher(session.uid);
       } catch (notesErr) {
         console.error("Error loading student notes in teacher dashboard:", notesErr);
       }
@@ -579,7 +714,10 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       setScores(scData || []);
       setAbsences(abData || []);
       setDocuments(docsData || []);
-      setStudentNotes(notesData || []);
+
+      const assignedLevels = session.assignedClasses || [];
+      const filteredNotes = (notesData || []).filter(note => assignedLevels.includes(note.level));
+      setStudentNotes(filteredNotes);
       setStudentAccounts(accountsData || []);
     } catch (e) {
       console.error("خطأ أثناء جلب السجلات التربوية والوثائق:", e);
@@ -1093,30 +1231,36 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
             تصفية الملفات حسب فئة القسم:
           </span>
           <div className="flex p-1 bg-slate-100 rounded-xl border border-slate-200/60 w-full sm:w-auto">
-            <button
-              onClick={() => setViewLevel('all')}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-black transition-all duration-200 cursor-pointer whitespace-nowrap ${
-                viewLevel === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:bg-white/40'
-              }`}
-            >
-              جميع الوافدين
-            </button>
-            <button
-              onClick={() => setViewLevel('5')}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-black transition-all duration-200 cursor-pointer whitespace-nowrap ${
-                viewLevel === '5' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-white/40'
-              }`}
-            >
-              المستوى الخامس
-            </button>
-            <button
-              onClick={() => setViewLevel('6')}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-black transition-all duration-200 cursor-pointer whitespace-nowrap ${
-                viewLevel === '6' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-white/40'
-              }`}
-            >
-              المستوى السادس
-            </button>
+            {(session.assignedClasses || []).length > 1 && (
+              <button
+                onClick={() => setViewLevel('all')}
+                className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-black transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                  viewLevel === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:bg-white/40'
+                }`}
+              >
+                جميع الوافدين
+              </button>
+            )}
+            {(session.assignedClasses || []).includes('5') && (
+              <button
+                onClick={() => setViewLevel('5')}
+                className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-black transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                  viewLevel === '5' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-white/40'
+                }`}
+              >
+                المستوى الخامس
+              </button>
+            )}
+            {(session.assignedClasses || []).includes('6') && (
+              <button
+                onClick={() => setViewLevel('6')}
+                className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-black transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                  viewLevel === '6' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-white/40'
+                }`}
+              >
+                المستوى السادس
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1168,28 +1312,32 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       الفئة المستهدفة للمستويات (أزرار الاختيار):
                     </span>
                     <div className="flex flex-col sm:flex-row gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
-                        <input
-                          type="radio"
-                          name="exerciseLevel"
-                          value="5"
-                          checked={exerciseLevel === '5'}
-                          onChange={() => setExerciseLevel('5')}
-                          className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
-                        />
-                        <span>المستوى الخامس ابتدائي</span>
-                      </label>
-                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
-                        <input
-                          type="radio"
-                          name="exerciseLevel"
-                          value="6"
-                          checked={exerciseLevel === '6'}
-                          onChange={() => setExerciseLevel('6')}
-                          className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
-                        />
-                        <span>المستوى السادس ابتدائي</span>
-                      </label>
+                      {session.assignedClasses?.includes('5') && (
+                        <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
+                          <input
+                            type="radio"
+                            name="exerciseLevel"
+                            value="5"
+                            checked={exerciseLevel === '5'}
+                            onChange={() => setExerciseLevel('5')}
+                            className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
+                          />
+                          <span>المستوى الخامس ابتدائي</span>
+                        </label>
+                      )}
+                      {session.assignedClasses?.includes('6') && (
+                        <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
+                          <input
+                            type="radio"
+                            name="exerciseLevel"
+                            value="6"
+                            checked={exerciseLevel === '6'}
+                            onChange={() => setExerciseLevel('6')}
+                            className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
+                          />
+                          <span>المستوى السادس ابتدائي</span>
+                        </label>
+                      )}
                     </div>
                   </div>
 
@@ -1249,8 +1397,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       value={aiLevel}
                       onChange={(e: any) => setAiLevel(e.target.value)}
                     >
-                      <option value="5">🏫 المستوى الخامس ابتدائي</option>
-                      <option value="6">🏫 المستوى السادس ابتدائي</option>
+                      {session.assignedClasses?.includes('5') && <option value="5">🏫 المستوى الخامس ابتدائي</option>}
+                      {session.assignedClasses?.includes('6') && <option value="6">🏫 المستوى السادس ابتدائي</option>}
                     </select>
                   </div>
 
@@ -1267,11 +1415,11 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       <option value="التراكيب">📚 مكون التراكيب (العربية)</option>
                       <option value="الصرف والتحويل">📚 مكون الصرف والتحويل (العربية)</option>
                       <option value="الإملاء">📚 مكون الإملاء (العربية)</option>
-                      <option value="Grammaire">🇫🇷 Grammaire (Français)</option>
-                      <option value="Conjugaison">🇫🇷 Conjugaison (Français)</option>
-                      <option value="Orthographe">🇫🇷 Orthographe (Français)</option>
-                      <option value="Lexique">🇫🇷 Lexique (Français)</option>
-                      <option value="Activités Orales">🇫🇷 Activités Orales (Français)</option>
+                      <option value="Grammaire">Grammaire (Français)</option>
+                      <option value="Conjugaison">Conjugaison (Français)</option>
+                      <option value="Orthographe">Orthographe (Français)</option>
+                      <option value="Lexique">Lexique (Français)</option>
+                      <option value="Activités Orales">Activités Orales (Français)</option>
                       <option value="الرياضيات / Mathématiques">📐 الرياضيات / Mathématiques</option>
                     </select>
                   </div>
@@ -1285,7 +1433,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       {[
                         { id: 'auto', label: '🔍 كشف تلقائي (حسب الدرس)' },
                         { id: 'ar_vocalized', label: '✍️ عربية فصيحة (كاملة التشكيل)' },
-                        { id: 'fr', label: '🇫🇷 الفرنسية (Français)' },
+                        { id: 'fr', label: 'الفرنسية (Français)' },
                       ].map((lang) => (
                         <button
                           type="button"
@@ -1576,28 +1724,32 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                   <div className="space-y-2">
                     <span className="block text-xs font-extrabold text-slate-700">المستوى والقسم المستهدف:</span>
                     <div className="flex flex-col sm:flex-row gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
-                        <input
-                          type="radio"
-                          name="scoreLevel"
-                          value="5"
-                          checked={scoreLevel === '5'}
-                          onChange={() => setScoreLevel('5')}
-                          className="accent-sky-500 h-4.5 w-4.5"
-                        />
-                        <span>المستوى الخامس</span>
-                      </label>
-                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
-                        <input
-                          type="radio"
-                          name="scoreLevel"
-                          value="6"
-                          checked={scoreLevel === '6'}
-                          onChange={() => setScoreLevel('6')}
-                          className="accent-sky-500 h-4.5 w-4.5"
-                        />
-                        <span>المستوى السادس</span>
-                      </label>
+                      {session.assignedClasses?.includes('5') && (
+                        <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
+                          <input
+                            type="radio"
+                            name="scoreLevel"
+                            value="5"
+                            checked={scoreLevel === '5'}
+                            onChange={() => setScoreLevel('5')}
+                            className="accent-sky-500 h-4.5 w-4.5"
+                          />
+                          <span>المستوى الخامس</span>
+                        </label>
+                      )}
+                      {session.assignedClasses?.includes('6') && (
+                        <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
+                          <input
+                            type="radio"
+                            name="scoreLevel"
+                            value="6"
+                            checked={scoreLevel === '6'}
+                            onChange={() => setScoreLevel('6')}
+                            className="accent-sky-500 h-4.5 w-4.5"
+                          />
+                          <span>المستوى السادس</span>
+                        </label>
+                      )}
                     </div>
                   </div>
 
@@ -1608,7 +1760,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     <input
                       type="text"
                       required
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-sm text-slate-850 font-semibold transition-all duration-200"
+                      disabled={!!session.subject}
+                      className="w-full px-4 py-3 bg-slate-100/70 border border-slate-200 rounded-2xl focus:outline-none text-sm text-slate-850 font-semibold transition-all duration-200 disabled:opacity-85"
                       placeholder="مثال: اللغة العربية، الرياضيات، النشاط العلمي"
                       value={scoreSubject}
                       onChange={(e) => setScoreSubject(e.target.value)}
@@ -1769,28 +1922,32 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                   <div className="space-y-2">
                     <span className="block text-xs font-extrabold text-slate-700">المستوى والقسم التعليمي للتمدرس:</span>
                     <div className="flex flex-col sm:flex-row gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
-                        <input
-                          type="radio"
-                          name="absenceLevel"
-                          value="5"
-                          checked={absenceLevel === '5'}
-                          onChange={() => setAbsenceLevel('5')}
-                          className="accent-sky-500 h-4.5 w-4.5"
-                        />
-                        <span>المستوى الخامس</span>
-                      </label>
-                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
-                        <input
-                          type="radio"
-                          name="absenceLevel"
-                          value="6"
-                          checked={absenceLevel === '6'}
-                          onChange={() => setAbsenceLevel('6')}
-                          className="accent-sky-500 h-4.5 w-4.5 animate-none"
-                        />
-                        <span>المستوى السادس</span>
-                      </label>
+                      {session.assignedClasses?.includes('5') && (
+                        <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
+                          <input
+                            type="radio"
+                            name="absenceLevel"
+                            value="5"
+                            checked={absenceLevel === '5'}
+                            onChange={() => setAbsenceLevel('5')}
+                            className="accent-sky-500 h-4.5 w-4.5"
+                          />
+                          <span>المستوى الخامس</span>
+                        </label>
+                      )}
+                      {session.assignedClasses?.includes('6') && (
+                        <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
+                          <input
+                            type="radio"
+                            name="absenceLevel"
+                            value="6"
+                            checked={absenceLevel === '6'}
+                            onChange={() => setAbsenceLevel('6')}
+                            className="accent-sky-500 h-4.5 w-4.5 animate-none"
+                          />
+                          <span>المستوى السادس</span>
+                        </label>
+                      )}
                     </div>
                   </div>
 
@@ -1985,28 +2142,32 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       الفئة المستهدفة للملخص أو الوثيقة:
                     </span>
                     <div className="flex flex-col sm:flex-row gap-4 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
-                        <input
-                          type="radio"
-                          name="docLevel"
-                          value="5"
-                          checked={docLevel === '5'}
-                          onChange={() => setDocLevel('5')}
-                          className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
-                        />
-                        <span>المستوى الخامس ابتدائي</span>
-                      </label>
-                      <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
-                        <input
-                          type="radio"
-                          name="docLevel"
-                          value="6"
-                          checked={docLevel === '6'}
-                          onChange={() => setDocLevel('6')}
-                          className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
-                        />
-                        <span>المستوى السادس ابتدائي</span>
-                      </label>
+                      {session.assignedClasses?.includes('5') && (
+                        <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
+                          <input
+                            type="radio"
+                            name="docLevel"
+                            value="5"
+                            checked={docLevel === '5'}
+                            onChange={() => setDocLevel('5')}
+                            className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
+                          />
+                          <span>المستوى الخامس ابتدائي</span>
+                        </label>
+                      )}
+                      {session.assignedClasses?.includes('6') && (
+                        <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-1.5">
+                          <input
+                            type="radio"
+                            name="docLevel"
+                            value="6"
+                            checked={docLevel === '6'}
+                            onChange={() => setDocLevel('6')}
+                            className="accent-sky-500 h-4.5 w-4.5 cursor-pointer"
+                          />
+                          <span>المستوى السادس ابتدائي</span>
+                        </label>
+                      )}
                     </div>
                   </div>
 
@@ -2366,8 +2527,26 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 <div className="xl:col-span-4 bg-slate-50 border border-slate-200/60 rounded-3xl p-6 space-y-5">
                   <h3 className="text-xs sm:text-sm font-black text-slate-800 border-b border-slate-200/50 pb-3 flex items-center gap-2">
                     <span>✨</span>
-                    <span>ولادة وتوليد حساب تلميذ(ة) جديد</span>
+                    <span>توليد حسابات التلاميذ</span>
                   </h3>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTeacherImportError(null);
+                      setTeacherImportedList([]);
+                      setShowTeacherImportModal(true);
+                    }}
+                    className="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-2xl text-xs font-black transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-150"
+                  >
+                    <span>📥 استيراد وتوليد لائحة التلاميذ (Excel / CSV)</span>
+                  </button>
+
+                  <div className="text-center py-1 flex items-center justify-center gap-3">
+                    <span className="h-px bg-slate-200 w-full" />
+                    <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">أو توليد حساب فردي</span>
+                    <span className="h-px bg-slate-200 w-full" />
+                  </div>
 
                   <form onSubmit={handleCreateStudentAccount} className="space-y-4">
                     {/* Name Input */}
@@ -2391,28 +2570,32 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         تحديد المستوى الدراسي:
                       </label>
                       <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setNewAccLevel('5')}
-                          className={`py-3 px-4 rounded-xl text-xs font-black border transition cursor-pointer text-center ${
-                            newAccLevel === '5'
-                              ? 'bg-blue-50 text-blue-700 border-blue-400 font-black ring-2 ring-blue-100'
-                              : 'bg-white text-slate-600 border-slate-150 hover:bg-slate-50'
-                          }`}
-                        >
-                          المستوى الخامس
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewAccLevel('6')}
-                          className={`py-3 px-4 rounded-xl text-xs font-black border transition cursor-pointer text-center ${
-                            newAccLevel === '6'
-                              ? 'bg-indigo-50 text-indigo-700 border-indigo-400 font-black ring-2 ring-indigo-100'
-                              : 'bg-white text-slate-600 border-slate-150 hover:bg-slate-50'
-                          }`}
-                        >
-                          المستوى السادس
-                        </button>
+                        {session.assignedClasses?.includes('5') && (
+                          <button
+                            type="button"
+                            onClick={() => setNewAccLevel('5')}
+                            className={`py-3 px-4 rounded-xl text-xs font-black border transition cursor-pointer text-center ${
+                              newAccLevel === '5'
+                                ? 'bg-blue-50 text-blue-700 border-blue-400 font-black ring-2 ring-blue-100'
+                                : 'bg-white text-slate-600 border-slate-150 hover:bg-slate-50'
+                            }`}
+                          >
+                            المستوى الخامس
+                          </button>
+                        )}
+                        {session.assignedClasses?.includes('6') && (
+                          <button
+                            type="button"
+                            onClick={() => setNewAccLevel('6')}
+                            className={`py-3 px-4 rounded-xl text-xs font-black border transition cursor-pointer text-center ${
+                              newAccLevel === '6'
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-400 font-black ring-2 ring-indigo-100'
+                                : 'bg-white text-slate-600 border-slate-150 hover:bg-slate-50'
+                            }`}
+                          >
+                            المستوى السادس
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -2730,6 +2913,194 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
             </div>
           </div>
         )}
+      {showTeacherImportModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 text-right space-y-6 max-h-[90vh] overflow-y-auto"
+            style={{ direction: 'rtl' }}
+          >
+            <div className="flex items-center justify-between border-b border-slate-150 pb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">📥</span>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 font-sans">استيراد وتوليد حسابات التلاميذ من ملف Excel</h3>
+                  <p className="text-[10px] sm:text-xs text-slate-400 font-bold">الرجاء رفع ملف يحتوي على قائمة أسماء تلاميذك لتوليد حساباتهم دفعة واحدة.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowTeacherImportModal(false);
+                  setTeacherImportedList([]);
+                  setTeacherImportError(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 font-black text-lg p-1.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {teacherImportError && (
+              <div className="bg-red-50 text-red-800 border-r-4 border-red-500 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                <span>{teacherImportError}</span>
+              </div>
+            )}
+
+            {/* Step 1: level assignment (Visible if teacher teaches both Level 5 and 6) */}
+            <div className="space-y-2">
+              <label className="block text-xs font-black text-slate-800">
+                1. حدد المستوى المستهدف للتلاميذ المرفقين في القائمة:
+              </label>
+              <div className="flex gap-4">
+                {session.assignedClasses?.includes('5') && (
+                  <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-2">
+                    <input
+                      type="radio"
+                      name="teacherImportLvl"
+                      value="5"
+                      checked={teacherImportLvl === '5'}
+                      onChange={() => {
+                        setTeacherImportLvl('5');
+                        if (teacherImportedList.length > 0) {
+                          setTeacherImportedList(prev => prev.map(item => ({ ...item, level: '5' })));
+                        }
+                      }}
+                      className="accent-indigo-600 h-4.5 w-4.5"
+                    />
+                    <span>المستوى الخامس ابتدائي</span>
+                  </label>
+                )}
+                {session.assignedClasses?.includes('6') && (
+                  <label className="flex items-center text-xs font-bold text-slate-700 cursor-pointer select-none gap-2">
+                    <input
+                      type="radio"
+                      name="teacherImportLvl"
+                      value="6"
+                      checked={teacherImportLvl === '6'}
+                      onChange={() => {
+                        setTeacherImportLvl('6');
+                        if (teacherImportedList.length > 0) {
+                          setTeacherImportedList(prev => prev.map(item => ({ ...item, level: '6' })));
+                        }
+                      }}
+                      className="accent-indigo-600 h-4.5 w-4.5"
+                    />
+                    <span>المستوى السادس ابتدائي</span>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Step 2: Upload Arena */}
+            <div className="space-y-2">
+              <label className="block text-xs font-black text-slate-800">
+                2. اختر ملف جدول البيانات (Excel / CSV):
+              </label>
+              <div 
+                className="border-2 border-dashed border-slate-201 hover:border-indigo-400 bg-slate-50/50 hover:bg-indigo-50/15 rounded-3xl p-8 transition-all flex flex-col items-center justify-center text-center cursor-pointer relative"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    processTeacherFile(e.dataTransfer.files[0]);
+                  }
+                }}
+                onClick={() => document.getElementById('teacher_excel_picker')?.click()}
+              >
+                <input
+                  type="file"
+                  id="teacher_excel_picker"
+                  accept=".xlsx, .xls, .csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      processTeacherFile(e.target.files[0]);
+                    }
+                  }}
+                />
+                <span className="text-3xl mb-3">📋</span>
+                <p className="text-xs font-black text-slate-700">اسحب وألقِ ملف Excel هنا، أو انقر للتصفح واختياره</p>
+                <p className="text-[10px] text-slate-400 mt-1 font-bold">ملاحظة: يجب أن يحتوي العمود الأول من الملف على الاسماء الكاملة للتلاميذ</p>
+              </div>
+            </div>
+
+            {/* Step 3: Parsed Output Review table */}
+            {teacherImportedList.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-800 flex items-center gap-1">
+                    <span>💡</span>
+                    <span>تم العثور على {teacherImportedList.length} تلميذ جاهزين للاستيراد:</span>
+                  </span>
+                  <button
+                    onClick={() => setTeacherImportedList([])}
+                    className="text-red-500 hover:text-red-700 text-[10px] font-black cursor-pointer"
+                  >
+                    إفراغ وتغيير الملف
+                  </button>
+                </div>
+
+                <div className="border border-slate-150 rounded-2xl overflow-hidden max-h-48 overflow-y-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-150 sticky top-0 text-slate-500 font-extrabold text-right">
+                      <tr>
+                        <th className="p-2 sm:p-3 text-right">اسم التلميذ(ة)</th>
+                        <th className="p-2 sm:p-3 text-center">المستوى</th>
+                        <th className="p-2 sm:p-3 text-right">المعرف المقترح</th>
+                        <th className="p-2 sm:p-3 text-right">كلمة المرور</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {teacherImportedList.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="p-2 sm:p-3 font-semibold text-slate-800 text-right">{item.displayName}</td>
+                          <td className="p-2 sm:p-3 font-extrabold text-blue-600 text-center">القسم {item.level}</td>
+                          <td className="p-2 sm:p-3 font-mono text-slate-500 text-right">{item.username}</td>
+                          <td className="p-2 sm:p-3 font-mono text-slate-500 text-right">{item.password}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end border-t border-slate-150 pt-5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTeacherImportModal(false);
+                  setTeacherImportedList([]);
+                  setTeacherImportError(null);
+                }}
+                className="px-5 py-3 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-2xl text-xs font-black cursor-pointer min-w-28 transition"
+              >
+                إلغاء الخروج
+              </button>
+              
+              <button
+                type="button"
+                disabled={teacherImportedList.length === 0 || teacherIsImporting}
+                onClick={handleTeacherConfirmImport}
+                className="px-5 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 disabled:opacity-40 rounded-2xl text-xs font-black min-w-32 cursor-pointer transition shadow-sm flex items-center justify-center gap-2"
+              >
+                {teacherIsImporting ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
+                    <span>جاري التوليد...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>✔️ توليد الحسابات الآن</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
       </div>
     </div>
   );
