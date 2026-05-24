@@ -392,8 +392,46 @@ export const dbService = {
               userRole = userData.level === '6' ? UserRole.STUDENT_6 : UserRole.STUDENT_5;
             }
 
+            let finalUid = userDoc.id;
+
+            // Secure dual-sync with Firebase Authentication upon logging in
+            if (isFirebaseAvailable && auth) {
+              const email = `${trimmedUsername}@qasmi.com`;
+              try {
+                console.log(`[dbService Auth] Dynamic Sync: Attempting authentication sign-in for: ${email}`);
+                await signInWithEmailAndPassword(auth, email, password);
+                console.log(`[dbService Auth] Authentication successful. UID matches: ${auth.currentUser?.uid}`);
+              } catch (signInErr: any) {
+                console.warn("[dbService Auth] User credentials match Firestore but Auth record is missing/mismatched. Registering dynamically now:", signInErr);
+                try {
+                  const authUid = await createAuthUserSafely(trimmedUsername, password);
+                  if (authUid) {
+                    finalUid = authUid;
+                    // Transfer and save the profile document with the exact Auth user uid
+                    await setDoc(doc(db, 'users', authUid), { ...userData, id: authUid, uid: authUid }, { merge: true });
+                    
+                    // If the old record was using a placeholder ID, delete it to prevent leftovers
+                    if (userDoc.id !== authUid) {
+                      try {
+                        await deleteDoc(doc(db, 'users', userDoc.id));
+                        console.log(`[dbService Auth] Cleaned up legacy doc ID: ${userDoc.id}`);
+                      } catch (deleteErr) {
+                        console.warn("[dbService Auth] Failed to prune legacy fallback document, skipping:", deleteErr);
+                      }
+                    }
+                    
+                    // Proceed with standard Auth login block
+                    await signInWithEmailAndPassword(auth, email, password);
+                    console.log("[dbService Auth] Dynamic Sync: Registration and authentication logged in successfully.");
+                  }
+                } catch (regErr) {
+                  console.error("[dbService Auth] Failed dynamic user-sync registration in Firebase Auth:", regErr);
+                }
+              }
+            }
+
             const session: UserSession = {
-              uid: userDoc.id,
+              uid: finalUid,
               username: userData.username,
               role: userRole,
               displayName: userData.displayName || userData.username,
@@ -1056,7 +1094,8 @@ export const dbService = {
       } catch (error) {
         const errMessage = error instanceof Error ? error.message : String(error);
         const isOffline = errMessage.includes('offline') || 
-                          errMessage.includes('Failed') || 
+                          errMessage.includes('Failed to get document') || 
+                          errMessage.includes('Failed to get documents') || 
                           errMessage.includes('network') || 
                           errMessage.includes('quota') || 
                           errMessage.includes('unreachable') ||
@@ -1158,7 +1197,7 @@ export const dbService = {
         }
       } catch (error) {
         const errMessage = error instanceof Error ? error.message : String(error);
-        if (errMessage.includes('offline') || errMessage.includes('Failed') || errMessage.includes('network') || errMessage.includes('unreachable')) {
+        if (errMessage.includes('offline') || errMessage.includes('Failed to get document') || errMessage.includes('Failed to get documents') || errMessage.includes('network') || errMessage.includes('unreachable')) {
           deactivateFirebase();
           console.warn("Firestore is offline while loading single student note. Gracefully falling back to local storage.");
         } else {
@@ -1230,7 +1269,7 @@ export const dbService = {
         firebaseUsers = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
       } catch (error) {
         const errMessage = error instanceof Error ? error.message : String(error);
-        if (errMessage.includes('offline') || errMessage.includes('Failed') || errMessage.includes('network') || errMessage.includes('unreachable')) {
+        if (errMessage.includes('offline') || errMessage.includes('Failed to get document') || errMessage.includes('Failed to get documents') || errMessage.includes('network') || errMessage.includes('unreachable')) {
           deactivateFirebase();
           console.warn("Firestore is offline while loading student accounts. Falling back to local storage.");
         } else {

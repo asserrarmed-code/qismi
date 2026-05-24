@@ -12,20 +12,33 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // We allow the teacher role email or the user administrator email
+    // Safely retrieve user profile from the trusted Firestore user profile
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // We allow the teacher role dynamically or the user administrator email
     function isTeacher() {
       return isSignedIn() && (
+        getUserData().role == 'teacher' || 
+        getUserData().role == 'superadmin' ||
         request.auth.token.email == 'teacher@edu.ma' || 
         request.auth.token.email == 'asserrarmed@gmail.com'
       );
     }
 
     function isLevel5Student() {
-      return isSignedIn() && request.auth.token.email == 'student5@edu.ma';
+      return isSignedIn() && (
+        (getUserData().role == 'student' && getUserData().level == '5') ||
+        request.auth.token.email == 'student5@edu.ma'
+      );
     }
 
     function isLevel6Student() {
-      return isSignedIn() && request.auth.token.email == 'student6@edu.ma';
+      return isSignedIn() && (
+        (getUserData().role == 'student' && getUserData().level == '6') ||
+        request.auth.token.email == 'student6@edu.ma'
+      );
     }
 
     function isValidId(id) {
@@ -159,6 +172,20 @@ service cloud.firestore {
       allow update: if isTeacher() && isValidId(documentId) && isValidDocument(incoming());
       
       allow delete: if isTeacher();
+    }
+
+    // --- Announcements match block ---
+    match /announcements/{announcementId} {
+      allow get, list: if isSignedIn();
+      allow create: if isTeacher() && isValidId(announcementId);
+      allow update, delete: if isTeacher();
+    }
+
+    // --- Timetables match block ---
+    match /timetables/{timetableId} {
+      allow get, list: if isSignedIn();
+      allow create: if isTeacher() && isValidId(timetableId);
+      allow update, delete: if isTeacher();
     }
 
     // --- Users match block ---
