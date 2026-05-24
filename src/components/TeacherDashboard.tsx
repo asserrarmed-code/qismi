@@ -7,7 +7,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 import { dbService } from '../lib/dbService';
-import { UserSession, Exercise, Score, Absence, EduDocument } from '../types';
+import { UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable } from '../types';
 import { 
   GraduationCap, 
   BookOpen, 
@@ -37,7 +37,9 @@ import {
   Settings,
   Key,
   User,
-  Lock
+  Lock,
+  Megaphone,
+  Bell
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -124,7 +126,23 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     }
     return 'all';
   });
-  const [activeTab, setActiveTab] = useState<'exercises' | 'scores' | 'absences' | 'documents' | 'notes' | 'accounts' | 'settings'>('exercises');
+  const [activeTab, setActiveTab] = useState<'exercises' | 'scores' | 'absences' | 'documents' | 'notes' | 'accounts' | 'settings' | 'announcements' | 'timetables'>('exercises');
+
+  // Announcements States
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementText, setAnnouncementText] = useState('');
+  const [announcementLevel, setAnnouncementLevel] = useState<'5' | '6' | 'all'>('all');
+  const [annError, setAnnError] = useState<string | null>(null);
+  const [annSuccess, setAnnSuccess] = useState<string | null>(null);
+  const [isSavingAnn, setIsSavingAnn] = useState(false);
+  const [isDeletingAnnId, setIsDeletingAnnId] = useState<string | null>(null);
+
+  // Timetables States
+  const [timetable5, setTimetable5] = useState<Timetable | null>(null);
+  const [timetable6, setTimetable6] = useState<Timetable | null>(null);
+  const [timetableError, setTimetableError] = useState<string | null>(null);
+  const [timetableSuccess, setTimetableSuccess] = useState<string | null>(null);
+  const [isUploadingTimetable, setIsUploadingTimetable] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [schoolName, setSchoolName] = useState<string>('');
@@ -763,6 +781,21 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       setAbsences(abData || []);
       setDocuments(docsData || []);
 
+      // Fetch announcements and timetables
+      let anns: Announcement[] = [];
+      let tt5: Timetable | null = null;
+      let tt6: Timetable | null = null;
+      try {
+        anns = await dbService.getAnnouncements();
+        tt5 = await dbService.getTimetable('5');
+        tt6 = await dbService.getTimetable('6');
+      } catch (err) {
+        console.error("Error loading announcements/timetables in teacher dashboard:", err);
+      }
+      setAnnouncements(anns || []);
+      setTimetable5(tt5);
+      setTimetable6(tt6);
+
       const assignedLevels = session.assignedClasses || [];
       const filteredNotes = (notesData || []).filter(note => assignedLevels.includes(note.level));
       setStudentNotes(filteredNotes);
@@ -777,6 +810,91 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   useEffect(() => {
     loadAllData();
   }, []);
+
+  // Announcements actions
+  const handleAddAnnouncement = async (e: FormEvent) => {
+    e.preventDefault();
+    setAnnError(null);
+    setAnnSuccess(null);
+
+    if (!announcementText.trim()) {
+      setAnnError('يرجى كتابة نص الإعلان أولاً.');
+      return;
+    }
+
+    setIsSavingAnn(true);
+    try {
+      const newAnn = await dbService.addAnnouncement(
+        announcementText,
+        announcementLevel,
+        session.uid,
+        session.displayName
+      );
+      setAnnouncements(prev => [newAnn, ...prev]);
+      setAnnouncementText('');
+      setAnnSuccess('تم نشر الإعلان بنجاح للجمهور المستهدف.');
+    } catch (err: any) {
+      console.error(err);
+      setAnnError('خطأ أثناء حفظ ونشر الإعلان: ' + (err.message || err));
+    } finally {
+      setIsSavingAnn(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذا الإعلان نهائياً؟')) {
+      return;
+    }
+
+    setIsDeletingAnnId(id);
+    try {
+      await dbService.deleteAnnouncement(id);
+      setAnnouncements(prev => prev.filter(ann => ann.id !== id));
+      setAnnSuccess('تم حذف الإعلان بنجاح.');
+    } catch (err: any) {
+      console.error(err);
+      setAnnError('خطأ أثناء حذف الإعلان من القواعد.');
+    } finally {
+      setIsDeletingAnnId(null);
+    }
+  };
+
+  // Timetables actions
+  const handleUploadTimetable = async (file: File, level: '5' | '6') => {
+    setTimetableError(null);
+    setTimetableSuccess(null);
+
+    if (!file) {
+      setTimetableError('يرجى تحديد ملف PDF الخاص باستعمال الزمن.');
+      return;
+    }
+
+    if (file.type !== 'application/pdf') {
+      setTimetableError('يرجى اختيار ملف بصيغة PDF فقط.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setTimetableError('حجم الملف كبير جداً. الحد الأقصى المسموح به هو 10 ميغابايت.');
+      return;
+    }
+
+    setIsUploadingTimetable(true);
+    try {
+      const timetableObj = await dbService.uploadTimetableFile(file, level, session.uid);
+      if (level === '5') {
+        setTimetable5(timetableObj);
+      } else {
+        setTimetable6(timetableObj);
+      }
+      setTimetableSuccess(`تم رفع وتحديث استعمال الزمن للمستوى السـ${level === '5' ? 'خامس' : 'سادس'} بنجاح.`);
+    } catch (err: any) {
+      console.error(err);
+      setTimetableError('فشلت عملية رفع الملف: ' + (err.message || err));
+    } finally {
+      setIsUploadingTimetable(false);
+    }
+  };
 
   // Generate AI Interactive Question
   const handleGenerateAiQuestion = async (e: FormEvent) => {
@@ -1274,6 +1392,30 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
           >
             <Settings className="h-4 w-4" />
             <span>إعدادات البوابة والحساب</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('announcements')}
+            className={`flex-1 lg:flex-initial text-center px-6 py-3.5 rounded-xl text-xs font-black transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap ${
+              activeTab === 'announcements' 
+                ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md' 
+                : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/50'
+            }`}
+          >
+            <Megaphone className="h-4 w-4" />
+            <span>لوحة الإعلانات والتنبيهات</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('timetables')}
+            className={`flex-1 lg:flex-initial text-center px-6 py-3.5 rounded-xl text-xs font-black transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap ${
+              activeTab === 'timetables' 
+                ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md' 
+                : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/50'
+            }`}
+          >
+            <CalendarDays className="h-4 w-4" />
+            <span>تنظيم استعمال الزمن PDF</span>
           </button>
         </div>
 
@@ -2955,6 +3097,295 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 </div>
 
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'announcements' && (
+          <div className="bg-white rounded-[32px] border border-sky-100/90 shadow-xl shadow-sky-100/40 p-6 sm:p-8 space-y-8 relative z-10">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-5 gap-4">
+              <div className="flex items-center gap-3">
+                <span className="p-3 bg-blue-50 text-blue-600 rounded-[20px] text-xl">📢</span>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-900">لوحة نشر الإعلانات وتنبيهات التلاميذ</h2>
+                  <p className="text-xs text-slate-450 font-bold">يمكنك كتابة نشرة أو إعلان أو تنبيه هام ليظهر بشكل فوري في فضاء التلاميذ للقسم المستهدف.</p>
+                </div>
+              </div>
+            </div>
+
+            {annError && (
+              <div className="bg-red-50 text-red-800 border-r-4 border-red-500 p-4 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                ⚠️ {annError}
+              </div>
+            )}
+
+            {annSuccess && (
+              <div className="bg-emerald-50 text-emerald-800 border-r-4 border-emerald-500 p-4 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                ✔️ {annSuccess}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+              {/* Form Side */}
+              <form onSubmit={handleAddAnnouncement} className="xl:col-span-4 bg-slate-50/60 border border-slate-200/50 p-6 rounded-3xl space-y-5 h-fit">
+                <h3 className="text-xs sm:text-sm font-black text-slate-800 border-b border-slate-200/50 pb-3">✍️ إنشاء إعلان جديد</h3>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-700">فئة التلاميذ المستهدفة:</label>
+                  <select
+                    value={announcementLevel}
+                    onChange={(e) => setAnnouncementLevel(e.target.value as '5' | '6' | 'all')}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-bold text-slate-800 transition shadow-sm"
+                  >
+                    <option value="all">الجميع (المستوى الخامس والسادس معاً)</option>
+                    {session.assignedClasses?.includes('5') && <option value="5">تلاميذ المستوى الخامس ابتدائي فقط</option>}
+                    {session.assignedClasses?.includes('6') && <option value="6">تلاميذ المستوى السادس ابتدائي فقط</option>}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-700">محتوى ونص الإعلان:</label>
+                  <textarea
+                    rows={4}
+                    value={announcementText}
+                    onChange={(e) => setAnnouncementText(e.target.value)}
+                    placeholder="اكتب هنا نص الإعلان أو التنبيه (مثال: أذكر تلامذتي الأعزاء بضرورة إحضار دفتر الأنشطة غداً للحصة...)"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-bold text-slate-800 transition shadow-sm font-sans text-right"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSavingAnn}
+                  className="w-full py-3.5 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white rounded-2xl text-xs font-black cursor-pointer transition shadow-md shadow-sky-500/10 flex items-center justify-center gap-2 hover:-translate-y-0.5"
+                >
+                  {isSavingAnn ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
+                      <span>جاري النشر...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>📢 نشر التنبيه فورياً للتلاميذ</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* List Side */}
+              <div className="xl:col-span-8 space-y-4">
+                <h3 className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2 font-mono">
+                  <span>📰 قائمة الإعلانات المنشورة بالفضاء</span>
+                  <span className="text-[10px] bg-slate-200 text-slate-650 px-2 py-0.5 rounded-full font-bold">
+                    {announcements.length}
+                  </span>
+                </h3>
+
+                {announcements.length === 0 ? (
+                  <div className="bg-slate-50/50 border border-slate-200/50 rounded-2xl p-8 text-center text-slate-400 text-xs font-bold">
+                    لا تتوفر أي إعلانات أو تنبيهات منشورة حالياً لشاشات التلاميذ.
+                  </div>
+                ) : (
+                  <div className="space-y-3.5 overflow-y-auto max-h-[500px] pr-1">
+                    {announcements.map((ann) => (
+                      <div key={ann.id} className="p-5 bg-white border border-slate-100 hover:border-sky-100 shadow-sm rounded-2xl transition-all duration-200 relative group flex items-start gap-4 hover:shadow-md text-right" dir="rtl">
+                        <div className="p-3 bg-amber-50 text-amber-500 rounded-xl shrink-0">
+                          <Bell className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-2 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-black bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                              المستهدف: {ann.level === 'all' ? 'الجميع (المستويين)' : `المستوى السـ${ann.level === '5' ? 'خامس' : 'سادس'}ـائي`}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5" />
+                              {new Date(ann.createdAt).toLocaleDateString('ar-MA', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-xs sm:text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap break-words">{ann.text}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">بواسطة: الأستاذ {ann.authorName}</p>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteAnnouncement(ann.id)}
+                          disabled={isDeletingAnnId === ann.id}
+                          className="text-red-400 hover:text-red-600 disabled:opacity-40 p-2 rounded-xl hover:bg-red-50/50 transition cursor-pointer self-start sm:self-center"
+                          title="حذف الإعلان"
+                        >
+                          {isDeletingAnnId === ann.id ? (
+                            <div className="h-4 w-4 border-2 border-t-transparent border-red-500 rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'timetables' && (
+          <div className="bg-white rounded-[32px] border border-sky-100/90 shadow-xl shadow-sky-100/40 p-6 sm:p-8 space-y-8 relative z-10">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-5 gap-4">
+              <div className="flex items-center gap-3">
+                <span className="p-3 bg-emerald-50 text-emerald-600 rounded-[20px] text-xl">📅</span>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-900">تنظيم وإدراج استعمال الزمن للقسم</h2>
+                  <p className="text-xs text-slate-450 font-bold">ارفع ملف كراسة استعمال الزمن بصيغة PDF وسيتمكن تلاميذ المستوى المستهدف من الاطلاع عليه وتحميله مباشرة من حساباتهم.</p>
+                </div>
+              </div>
+            </div>
+
+            {timetableError && (
+              <div className="bg-red-50 text-red-800 border-r-4 border-red-500 p-4 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                ⚠️ {timetableError}
+              </div>
+            )}
+
+            {timetableSuccess && (
+              <div className="bg-emerald-50 text-emerald-800 border-r-4 border-emerald-500 p-4 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                ✔️ {timetableSuccess}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-right" dir="rtl">
+              {/* Level 5 Timetable Card */}
+              {session.assignedClasses?.includes('5') && (
+                <div className="bg-slate-50/50 border border-slate-200/50 p-6 rounded-3xl space-y-5 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <h3 className="text-xs sm:text-sm font-black text-slate-800 flex items-center justify-between">
+                      <span>📌 استعمال الزمن - المستوى الخامس ابتدائي</span>
+                      <span className="text-[10px] px-2.5 py-1 bg-sky-100 text-sky-700 rounded-full font-bold">القسم 5</span>
+                    </h3>
+
+                    {timetable5 ? (
+                      <div className="p-4 bg-white border border-sky-100 rounded-2xl flex items-center gap-3 shadow-inner">
+                        <div className="p-3 bg-red-50 text-red-550 rounded-xl shrink-0">
+                          <FileText className="h-6 w-6" />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-xs font-bold text-slate-800 truncate" title={timetable5.fileName}>{timetable5.fileName}</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">
+                            تاريخ الرفع: {new Date(timetable5.createdAt).toLocaleDateString('ar-MA')}
+                          </p>
+                        </div>
+                        <a
+                          href={timetable5.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-650 rounded-xl text-[10px] font-black shrink-0 transition"
+                        >
+                          معاينة / تحميل
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="p-6 bg-amber-50/50 border border-amber-100 text-amber-700 rounded-2xl text-xs font-bold text-center">
+                        لم يتم رفع أو حفظ كراسة استعمال الزمن للمستوى الخامس بعد.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-slate-700">تحديث أو رفع ملف PDF جديد:</label>
+                    <div 
+                      className="border border-dashed border-slate-300 hover:border-sky-400 hover:bg-sky-50/20 rounded-2xl p-6 text-center cursor-pointer transition relative"
+                      onClick={() => document.getElementById('timetable_picker_5')?.click()}
+                    >
+                      <input
+                        type="file"
+                        id="timetable_picker_5"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleUploadTimetable(e.target.files[0], '5');
+                          }
+                        }}
+                      />
+                      <UploadCloud className="h-6 w-6 text-slate-400 mx-auto mb-2" />
+                      <p className="text-xs text-slate-550 font-bold">انقر لاختيار ملف PDF لاستعمال الزمن للمستوى الخامس</p>
+                      {isUploadingTimetable && (
+                        <div className="absolute inset-0 bg-white/85 flex items-center justify-center rounded-2xl font-mono">
+                          <div className="flex items-center gap-2">
+                            <div className="h-4 w-4 border-2 border-t-transparent border-sky-500 rounded-full animate-spin" />
+                            <span className="text-xs text-slate-700 font-black">جاري تحديث ورفع الملف...</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Level 6 Timetable Card */}
+              {session.assignedClasses?.includes('6') && (
+                <div className="bg-slate-50/50 border border-slate-200/50 p-6 rounded-3xl space-y-5 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <h3 className="text-xs sm:text-sm font-black text-slate-800 flex items-center justify-between">
+                      <span>📌 استعمال الزمن - المستوى السادس ابتدائي</span>
+                      <span className="text-[10px] px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full font-bold">القسم 6</span>
+                    </h3>
+
+                    {timetable6 ? (
+                      <div className="p-4 bg-white border border-indigo-100 rounded-2xl flex items-center gap-3 shadow-inner">
+                        <div className="p-3 bg-red-50 text-red-550 rounded-xl shrink-0">
+                          <FileText className="h-6 w-6" />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-xs font-bold text-slate-800 truncate" title={timetable6.fileName}>{timetable6.fileName}</p>
+                          <p className="text-[10px] text-slate-400 font-semibold">
+                            تاريخ الرفع: {new Date(timetable6.createdAt).toLocaleDateString('ar-MA')}
+                          </p>
+                        </div>
+                        <a
+                          href={timetable6.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-650 rounded-xl text-[10px] font-black shrink-0 transition"
+                        >
+                          معاينة / تحميل
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="p-6 bg-amber-50/50 border border-amber-100 text-amber-700 rounded-2xl text-xs font-bold text-center">
+                        لم يتم رفع أو حفظ كراسة استعمال الزمن للمستوى السادس بعد.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-slate-700">تحديث أو رفع ملف PDF جديد:</label>
+                    <div 
+                      className="border border-dashed border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/20 rounded-2xl p-6 text-center cursor-pointer transition relative"
+                      onClick={() => document.getElementById('timetable_picker_6')?.click()}
+                    >
+                      <input
+                        type="file"
+                        id="timetable_picker_6"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleUploadTimetable(e.target.files[0], '6');
+                          }
+                        }}
+                      />
+                      <UploadCloud className="h-6 w-6 text-slate-400 mx-auto mb-2" />
+                      <p className="text-xs text-slate-550 font-bold">انقر لاختيار ملف PDF لاستعمال الزمن للمستوى السادس</p>
+                      {isUploadingTimetable && (
+                        <div className="absolute inset-0 bg-white/85 flex items-center justify-center rounded-2xl font-mono">
+                          <div className="flex items-center gap-2">
+                            <div className="h-4 w-4 border-2 border-t-transparent border-indigo-500 rounded-full animate-spin" />
+                            <span className="text-xs text-slate-700 font-black">جاري تحديث ورفع الملف...</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

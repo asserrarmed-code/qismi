@@ -22,7 +22,7 @@ import { db, isFirebaseAvailable, auth, storage, deactivateFirebase } from './fi
 import { initializeApp, getApps } from 'firebase/app';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, getAuth } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
-import { UserRole, UserSession, Exercise, Score, Absence, EduDocument } from '../types';
+import { UserRole, UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable } from '../types';
 
 enum OperationType {
   CREATE = 'create',
@@ -1592,5 +1592,180 @@ export const dbService = {
       }
     }
     localStorage.setItem('edu_school_name', cleanName);
+  },
+
+  getAnnouncements: async (level?: '5' | '6' | 'all'): Promise<Announcement[]> => {
+    const logPath = 'announcements';
+    console.log(`[dbService] getAnnouncements for level: ${level}`);
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, logPath), orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        const firebaseAnnouncements = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Announcement));
+        
+        // Sync to local storage
+        saveLocalItems('edu_announcements', firebaseAnnouncements);
+        
+        if (level && level !== 'all') {
+          return firebaseAnnouncements.filter(ann => ann.level === level || ann.level === 'all');
+        }
+        return firebaseAnnouncements;
+      } catch (error) {
+        console.warn("[dbService] Firestore error in getAnnouncements, falling back to local:", error);
+      }
+    }
+    
+    const local = getLocalItems<Announcement>('edu_announcements');
+    const sorted = local.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (level && level !== 'all') {
+      return sorted.filter(ann => ann.level === level || ann.level === 'all');
+    }
+    return sorted;
+  },
+
+  addAnnouncement: async (text: string, level: '5' | '6' | 'all', authorId: string, authorName: string): Promise<Announcement> => {
+    const logPath = 'announcements';
+    const newAnn: Omit<Announcement, 'id'> = {
+      text: text.trim(),
+      level,
+      createdAt: new Date().toISOString(),
+      authorId,
+      authorName
+    };
+
+    console.log("[dbService] addAnnouncement payload:", newAnn);
+
+    let createdAnn: Announcement;
+    if (isFirebaseAvailable) {
+      try {
+        const docRef = await addDoc(collection(db, logPath), newAnn);
+        createdAnn = { id: docRef.id, ...newAnn };
+        console.log("[dbService] Announcement saved in Firestore with ID:", docRef.id);
+      } catch (error) {
+        console.error("[dbService] Error writing announcement to Firestore:", error);
+        createdAnn = { id: `ann_${Date.now()}`, ...newAnn };
+      }
+    } else {
+      createdAnn = { id: `ann_${Date.now()}`, ...newAnn };
+    }
+
+    // Always update local storage
+    const local = getLocalItems<Announcement>('edu_announcements');
+    local.unshift(createdAnn);
+    saveLocalItems('edu_announcements', local);
+    return createdAnn;
+  },
+
+  deleteAnnouncement: async (id: string): Promise<void> => {
+    const logPath = 'announcements';
+    console.log(`[dbService] deleteAnnouncement: ${id}`);
+    if (isFirebaseAvailable) {
+      try {
+        await deleteDoc(doc(db, logPath, id));
+        console.log(`[dbService] Deleted announcement from Firestore: ${id}`);
+      } catch (error) {
+        console.error(`[dbService] Error deleting announcement ${id} from Firestore:`, error);
+      }
+    }
+
+    const local = getLocalItems<Announcement>('edu_announcements');
+    const filtered = local.filter(ann => ann.id !== id);
+    saveLocalItems('edu_announcements', filtered);
+  },
+
+  getTimetable: async (level: '5' | '6'): Promise<Timetable | null> => {
+    const logPath = 'timetables';
+    console.log(`[dbService] getTimetable for level: ${level}`);
+    
+    if (isFirebaseAvailable) {
+      try {
+        const docSnap = await getDoc(doc(db, logPath, level));
+        if (docSnap.exists()) {
+          const fetched = { id: docSnap.id, ...(docSnap.data() as any) } as Timetable;
+          localStorage.setItem(`edu_timetable_${level}`, JSON.stringify(fetched));
+          return fetched;
+        } else {
+          console.log(`[dbService] No timetable document found for level ${level} in Firestore.`);
+        }
+      } catch (error) {
+        console.warn(`[dbService] Firestore error in getTimetable for level ${level}, falling back to local:`, error);
+      }
+    }
+
+    const cached = localStorage.getItem(`edu_timetable_${level}`);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  },
+
+  saveTimetable: async (level: '5' | '6', fileUrl: string, fileName: string, authorId: string): Promise<Timetable> => {
+    const logPath = 'timetables';
+    const payload: Omit<Timetable, 'id'> = {
+      level,
+      fileUrl,
+      fileName,
+      createdAt: new Date().toISOString(),
+      authorId
+    };
+
+    console.log(`[dbService] saveTimetable for level ${level}:`, payload);
+
+    if (isFirebaseAvailable) {
+      try {
+        await setDoc(doc(db, logPath, level), payload, { merge: true });
+        console.log(`[dbService] Successfully saved timetable for level ${level} in Firestore.`);
+      } catch (error) {
+        console.error(`[dbService] Error saving timetable for level ${level} in Firestore:`, error);
+      }
+    }
+
+    const timetableObj: Timetable = { id: level, ...payload };
+    localStorage.setItem(`edu_timetable_${level}`, JSON.stringify(timetableObj));
+    return timetableObj;
+  },
+
+  uploadTimetableFile: async (file: File, level: '5' | '6', authorId: string): Promise<Timetable> => {
+    if (isFirebaseAvailable && storage) {
+      try {
+        console.log(`[dbService] Starting file upload for timetable level ${level}: ${file.name}`);
+        const uniqueFileName = `timetable_${level}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+        const storageRef = ref(storage, `timetables/${uniqueFileName}`);
+        const snapshot = await uploadBytes(storageRef, file);
+        const downloadUrl = await getDownloadURL(snapshot.ref);
+        console.log(`[dbService] File uploaded successfully to Storage. URL: ${downloadUrl}`);
+        return await dbService.saveTimetable(level, downloadUrl, file.name, authorId);
+      } catch (error) {
+        console.error("[dbService] Error in uploadTimetableFile or falling back to Base64:", error);
+      }
+    }
+
+    // fallback base64
+    console.log("[dbService] Falling back to Base64 for timetable local caching.");
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const fileUrl = event.target?.result as string;
+          if (!fileUrl) {
+            reject(new Error("تعذرت قراءة ملف استعمال الزمن المحدد."));
+            return;
+          }
+          const timetableObj = await dbService.saveTimetable(level, fileUrl, file.name, authorId);
+          resolve(timetableObj);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      reader.onerror = () => {
+        reject(new Error("فشلت عملية قراءة ملف استعمال الزمن المحلي."));
+      };
+      reader.readAsDataURL(file);
+    });
   }
 };
+

@@ -57,3 +57,22 @@ export interface EduDocument {
   createdAt: string; // ISO String
   authorId: string;
 }
+
+export interface Announcement {
+  id: string;
+  text: string;
+  createdAt: string; // ISO String
+  level: '5' | '6' | 'all';
+  authorId: string;
+  authorName: string;
+}
+
+export interface Timetable {
+  id: string;
+  level: '5' | '6';
+  fileUrl: string;
+  fileName: string;
+  createdAt: string;
+  authorId: string;
+}
+

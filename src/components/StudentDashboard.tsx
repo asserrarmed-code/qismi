@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { dbService } from '../lib/dbService';
-import { UserSession, Exercise, Score, Absence, EduDocument } from '../types';
+import { UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable } from '../types';
 import { 
   GraduationCap, 
   Award, 
@@ -29,7 +29,9 @@ import {
   School,
   Edit,
   Save,
-  X
+  X,
+  Megaphone,
+  Bell
 } from 'lucide-react';
 
 interface StudentDashboardProps {
@@ -127,6 +129,10 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [documents, setDocuments] = useState<EduDocument[]>([]);
   const [teacherNote, setTeacherNote] = useState<string>('');
+
+  // Announcements & Timetables States
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [timetable, setTimetable] = useState<Timetable | null>(null);
   
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<'all' | 'تمرين' | 'فرض' | 'مراقبة مستمرة'>('all');
   const [answeredQuiz, setAnsweredQuiz] = useState<{[exerciseId: string]: { selected: string; isCorrect: boolean } }>({});
@@ -158,6 +164,18 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         setAbsences(abData || []);
         setDocuments(docsData || []);
         setTeacherNote(note || '');
+
+        // Fetch announcements and timetables
+        let anns: Announcement[] = [];
+        let tt: Timetable | null = null;
+        try {
+          anns = await dbService.getAnnouncements(currentLevel);
+          tt = await dbService.getTimetable(currentLevel as '5' | '6');
+        } catch (annTableErr) {
+          console.error("Error loading announcements or timetable in student dashboard:", annTableErr);
+        }
+        setAnnouncements(anns || []);
+        setTimetable(tt);
 
         // 1. Fetch school name
         try {
@@ -272,34 +290,113 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         </button>
       </motion.div>
 
-      {/* Teacher's Note Section - Highlighted & Elegant Display */}
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.5 }}
-        className="mt-6 bg-gradient-to-br from-indigo-50 to-white border-2 border-indigo-100/80 rounded-[26px] p-6 shadow-md shadow-indigo-100/10 flex flex-col md:flex-row items-start md:items-center gap-5"
-      >
-        <div className="h-12 w-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center font-extrabold text-lg shadow-lg shadow-indigo-200 shrink-0">
-          👨‍🏫
-        </div>
-        <div className="space-y-1.5 w-full">
-          <h3 className="text-sm sm:text-base font-black text-indigo-950 flex items-center gap-2">
-            <span>توجيه وملاحظة السيد الأستاذ الموجهة إليك:</span>
-          </h3>
-          <div className="bg-white border border-indigo-100 rounded-2xl p-4 shadow-inner relative overflow-hidden">
-            <div className="absolute left-3 bottom-0 text-7xl select-none opacity-[0.03] font-serif font-black">”</div>
-            {teacherNote ? (
-              <p className="text-xs sm:text-sm font-black text-slate-800 leading-relaxed text-right relative z-10">
-                {teacherNote}
-              </p>
-            ) : (
-              <p className="text-xs sm:text-sm italic font-bold text-slate-400 leading-relaxed text-right relative z-10">
-                أهلاً بك يا بطل! لم يرسل لك الأستاذ أي ملاحظات خاصة في الوقت الحالي. استمر بالاجتهاد والتحصيل المتميز.
-              </p>
-            )}
+      {/* Announcements Board - Modern Eye-Catching Banner */}
+      {announcements.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05, duration: 0.5 }}
+          className="mt-6 bg-gradient-to-br from-amber-500/10 via-amber-400/5 to-white border-2 border-amber-300 rounded-[28px] p-6 shadow-md shadow-amber-200/25 space-y-4 text-right"
+          dir="rtl"
+        >
+          <div className="flex items-center gap-3 border-b border-amber-200/50 pb-3">
+            <span className="p-2.5 bg-amber-400 text-amber-950 rounded-2xl">📢</span>
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-amber-950">تنبيهات وإعلانات هامة من طاقم التدريس</h2>
+              <p className="text-[10px] text-slate-500 font-bold">الرجاء الانتباه للمستجدات والتعليمات الأخيرة لمستواك الدراسي:</p>
+            </div>
           </div>
-        </div>
-      </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {announcements.map((ann) => (
+              <div key={ann.id} className="p-4 bg-white/80 backdrop-blur-sm border border-amber-250 hover:border-amber-400 rounded-2xl transition shadow-sm space-y-2 flex flex-col justify-between">
+                <p className="text-xs font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap break-words">{ann.text}</p>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[10px] text-slate-400 font-bold">
+                  <span>بواسطة: الأستاذ {ann.authorName}</span>
+                  <span className="flex items-center gap-1 font-mono">
+                    <Clock className="h-3.5 w-3.5" />
+                    {new Date(ann.createdAt).toLocaleDateString('ar-MA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Grid: Teacher's Guidance Notes & Level Timetables */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        {/* Column 1: Teacher's Note Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.5 }}
+          className="bg-gradient-to-br from-indigo-50 to-white border-2 border-indigo-100/80 rounded-[26px] p-6 shadow-md shadow-indigo-100/10 flex items-start gap-4 text-right"
+          dir="rtl"
+        >
+          <div className="h-12 w-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center font-extrabold text-lg shadow-lg shadow-indigo-200 shrink-0 select-none">
+            👨‍🏫
+          </div>
+          <div className="space-y-1.5 w-full min-w-0">
+            <h3 className="text-xs sm:text-sm font-black text-indigo-950 flex items-center gap-2">
+              <span>توجيه وملاحظة الأستاذ الموجهة إليك:</span>
+            </h3>
+            <div className="bg-white border border-indigo-50 rounded-2xl p-4 shadow-inner relative overflow-hidden h-[100px] overflow-y-auto">
+              <div className="absolute left-3 bottom-0 text-7xl select-none opacity-[0.03] font-serif font-black pointer-events-none">”</div>
+              {teacherNote ? (
+                <p className="text-xs sm:text-sm font-black text-slate-800 leading-relaxed text-right relative z-10">
+                  {teacherNote}
+                </p>
+              ) : (
+                <p className="text-xs sm:text-sm italic font-bold text-slate-400 leading-relaxed text-right relative z-10">
+                  أهلاً بك يا بطل! لم يرسل لك الأستاذ أي ملاحظات خاصة في الوقت الحالي. استمر بالاجتهاد والتحصيل المتميز.
+                </p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Column 2: Timetable Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12, duration: 0.5 }}
+          className="bg-gradient-to-br from-emerald-50 to-white border-2 border-emerald-100/80 rounded-[26px] p-6 shadow-md shadow-emerald-100/10 flex items-start gap-4 text-right"
+          dir="rtl"
+        >
+          <div className="h-12 w-12 bg-emerald-600 text-white rounded-2xl flex items-center justify-center font-extrabold text-lg shadow-lg shadow-emerald-200 shrink-0 select-none">
+            📅
+          </div>
+          <div className="space-y-1.5 w-full min-w-0">
+            <h3 className="text-xs sm:text-sm font-black text-emerald-950 flex items-center justify-between">
+              <span>استعمال الزمن الخاص بمستواك الدراسي:</span>
+            </h3>
+
+            <div className="bg-white border border-emerald-50 rounded-2xl p-4 shadow-inner flex flex-col justify-center items-center h-[100px] relative overflow-hidden">
+              {timetable ? (
+                <div className="w-full flex flex-col items-center gap-2 relative z-10">
+                  <p className="text-[11px] font-bold text-slate-700 truncate max-w-full text-center" title={timetable.fileName}>
+                    📂 {timetable.fileName}
+                  </p>
+                  <a
+                    href={timetable.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-5 py-2 bg-emerald-550 hover:bg-emerald-600 text-white hover:shadow-md rounded-xl text-xs font-black transition flex items-center gap-1.5 leading-none shadow-sm cursor-pointer"
+                  >
+                    <FileDown className="h-4 w-4 shrink-0" />
+                    <span>تحميل / عرض استعمال الزمن PDF</span>
+                  </a>
+                </div>
+              ) : (
+                <p className="text-xs sm:text-sm italic font-bold text-slate-450 leading-relaxed text-center relative z-10">
+                  لم يتم رفع ملف استعمال زمن معتمد من الأستاذ لهذا المستوى بعد.
+                </p>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      </div>
 
       {/* Level Segregation Information Ribbon - Friendly warning card */}
       <motion.div 
