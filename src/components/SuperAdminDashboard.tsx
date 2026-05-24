@@ -71,6 +71,11 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
   const [defaultImportLevel, setDefaultImportLevel] = useState<'5' | '6'>('5');
   const [isImporting, setIsImporting] = useState(false);
 
+  // Safe Loading states for Atomic User Management
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+  const [isDeletingUser, setIsDeletingUser] = useState<string | null>(null);
+
   // Success Feedback Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -150,6 +155,7 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
       return;
     }
 
+    setIsCreatingUser(true);
     try {
       await dbService.saveUserAccount({
         displayName: newDisplayName.trim(),
@@ -174,6 +180,8 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
       fetchUsersList();
     } catch (err: any) {
       setErrorForm(err.message || 'فشلت عملية حفظ الحساب في Firestore.');
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -199,6 +207,7 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
       return;
     }
 
+    setIsUpdatingUser(true);
     try {
       await dbService.saveUserAccount({
         id: editingUser.id,
@@ -217,6 +226,8 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
       fetchUsersList();
     } catch (err: any) {
       setErrorEditForm(err.message || 'فشلت عملية تحديث الحساب في Firestore.');
+    } finally {
+      setIsUpdatingUser(false);
     }
   };
 
@@ -403,12 +414,15 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
     }
 
     if (confirm(`⚠️ تحذير نهائي: هل أنت متأكد من حذف الحساب الدراسي لـ (${name}) بشكل كامل ونهائي من الخادم السحابي وقاعدة البيانات؟`)) {
+      setIsDeletingUser(uid);
       try {
         await dbService.deleteUserAccount(uid);
         triggerToast(`تمت إزالة الحساب الدراسي لـ (${name}) بنجاح.`);
         fetchUsersList();
       } catch (err: any) {
         alert('حدث خطأ أثناء إجراء الحذف من قاعدة البيانات: ' + err.message);
+      } finally {
+        setIsDeletingUser(null);
       }
     }
   };
@@ -778,11 +792,20 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
                         {/* Delete Action button */}
                         <button
                           onClick={() => handleDeleteUser(u.id || `uid_${u.username}`, u.displayName)}
-                          disabled={u.username === 'superadmin' || u.id === session.uid}
+                          disabled={u.username === 'superadmin' || u.id === session.uid || isDeletingUser !== null}
                           className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200/50 rounded-xl text-[11px] font-bold cursor-pointer transition select-none inline-flex items-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span>حذف الحساب</span>
+                          {isDeletingUser === (u.id || `uid_${u.username}`) ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                              <span>جاري الحذف...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>حذف الحساب</span>
+                            </>
+                          )}
                         </button>
 
                       </td>
@@ -999,14 +1022,23 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
                 <div className="pt-4 grid grid-cols-2 gap-3 border-t border-sky-50 mt-6">
                   <button
                     type="submit"
-                    className="py-3 px-4 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md shadow-sky-500/10"
+                    disabled={isCreatingUser}
+                    className="py-3 px-4 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md shadow-sky-500/10 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                   >
-                    💾 تأكيد وإنشاء الحساب الدراسي
+                    {isCreatingUser ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>جاري إنشاء الحساب...</span>
+                      </>
+                    ) : (
+                      <span>💾 تأكيد وإنشاء الحساب الدراسي</span>
+                    )}
                   </button>
                   <button
                     type="button"
+                    disabled={isCreatingUser}
                     onClick={() => setShowAddModal(false)}
-                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black transition cursor-pointer"
+                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black transition cursor-pointer disabled:opacity-40"
                   >
                     إلغاء الأمر
                   </button>
@@ -1218,14 +1250,23 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
                 <div className="pt-4 grid grid-cols-2 gap-3 border-t border-sky-50 mt-6 font-sans">
                   <button
                     type="submit"
-                    className="py-3 px-4 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md shadow-sky-500/10"
+                    disabled={isUpdatingUser}
+                    className="py-3 px-4 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md shadow-sky-500/10 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-1.5"
                   >
-                    💾 حفظ البيانات المعدلة
+                    {isUpdatingUser ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>جاري حفظ التعديلات...</span>
+                      </>
+                    ) : (
+                      <span>💾 حفظ البيانات المعدلة</span>
+                    )}
                   </button>
                   <button
                     type="button"
+                    disabled={isUpdatingUser}
                     onClick={() => { setShowEditUserModal(false); setEditingUser(null); }}
-                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black transition cursor-pointer"
+                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black transition cursor-pointer disabled:opacity-40"
                   >
                     إلغاء الأمر
                   </button>
