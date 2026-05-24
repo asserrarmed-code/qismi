@@ -40,6 +40,17 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       if (!username.trim() || !password.trim()) {
         throw new Error('الرجاء إدخال اسم المستخدم وكلمة المرور للولوج.');
       }
+      
+      // Clear legacy browser storage cache to ensure fresh real-time retrieval from Firestore
+      try {
+        localStorage.removeItem('edu_users_all');
+        localStorage.removeItem('edu_student_accounts');
+        localStorage.removeItem('edu_student_notes');
+        console.log("[LoginPage] Local storage cache cleared cleanly before authorization.");
+      } catch (cacheErr) {
+        console.error("Failed to clear cached accounts storage:", cacheErr);
+      }
+
       const session = await dbService.login(username, password);
       onLoginSuccess(session);
     } catch (error: any) {

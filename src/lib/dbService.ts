@@ -15,7 +15,8 @@ import {
   getDocFromServer,
   getDocsFromServer,
   setDoc,
-  getDoc
+  getDoc,
+  onSnapshot
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, isFirebaseAvailable, auth, storage, deactivateFirebase } from './firebase';
@@ -345,113 +346,110 @@ export const dbService = {
 
     // 1. If Firebase is active, we check credentials and roles SECURELY via Firestore query directly
     if (isFirebaseAvailable) {
-      try {
-        // Auto-seed default superadmin into Firestore if first-time empty login
-        if (trimmedUsername === 'superadmin') {
-          const docRef = doc(db, 'users', 'uid_superadmin');
-          let checkDoc;
-          try {
-            checkDoc = await getDocFromServer(docRef);
-          } catch {
-            checkDoc = await getDoc(docRef);
-          }
-          if (!checkDoc.exists()) {
-            await setDoc(docRef, {
-              username: 'superadmin',
-              password: 'superadmin2026',
-              displayName: 'المشرف العام للمنصة',
-              role: 'superadmin',
-              createdAt: new Date().toISOString()
-            });
-            console.log("Seeded default superadmin user inside Firestore collection.");
-          }
+      // Auto-seed default superadmin into Firestore if first-time empty login
+      if (trimmedUsername === 'superadmin') {
+        const docRef = doc(db, 'users', 'uid_superadmin');
+        let checkDoc;
+        try {
+          checkDoc = await getDocFromServer(docRef);
+        } catch {
+          checkDoc = await getDoc(docRef);
         }
+        if (!checkDoc.exists()) {
+          await setDoc(docRef, {
+            username: 'superadmin',
+            password: 'superadmin2026',
+            displayName: 'المشرف العام للمنصة',
+            role: 'superadmin',
+            createdAt: new Date().toISOString()
+          });
+          console.log("Seeded default superadmin user inside Firestore collection.");
+        }
+      }
 
-        // Query database directly for this exact user using getDocsFromServer to force refresh (bypass cache)
-        const q = query(collection(db, 'users'), where('username', '==', trimmedUsername));
-        const snapshot = await getDocsFromServer(q);
+      // Query database directly for this exact user using getDocsFromServer to force refresh (bypass cache)
+      const q = query(collection(db, 'users'), where('username', '==', trimmedUsername));
+      const snapshot = await getDocsFromServer(q);
+      
+      if (!snapshot.empty) {
+        const userDoc = snapshot.docs[0];
+        const userData = userDoc.data();
         
-        if (!snapshot.empty) {
-          const userDoc = snapshot.docs[0];
-          const userData = userDoc.data();
-          
-          if (userData.password === password) {
-            // Check if role is missing or corrupt/invalid in Firestore
-            const validRoles = ['superadmin', 'teacher', 'student'];
-            const roleVal = userData.role ? String(userData.role).trim().toLowerCase() : '';
-            if (!roleVal || !validRoles.includes(roleVal)) {
-              throw new Error("بيانات الحساب غير مكتملة، يرجى تحديث بيانات هذا المستخدم");
-            }
+        if (userData.password === password) {
+          // Check if role is missing or corrupt/invalid in Firestore
+          const validRoles = ['superadmin', 'teacher', 'student'];
+          const roleVal = userData.role ? String(userData.role).trim().toLowerCase() : '';
+          if (!roleVal || !validRoles.includes(roleVal)) {
+            throw new Error("بيانات الحساب غير مكتملة، يرجى تحديث بيانات هذا المستخدم");
+          }
 
-            let userRole: UserRole = UserRole.TEACHER;
-            if (userData.role === 'superadmin' || userData.role === UserRole.SUPERADMIN) {
-              userRole = UserRole.SUPERADMIN;
-            } else if (userData.role === 'teacher' || userData.role === UserRole.TEACHER) {
-              userRole = UserRole.TEACHER;
-            } else if (userData.role === 'student' || userData.role === UserRole.STUDENT_5 || userData.role === UserRole.STUDENT_6) {
-              userRole = userData.level === '6' ? UserRole.STUDENT_6 : UserRole.STUDENT_5;
-            }
+          let userRole: UserRole = UserRole.TEACHER;
+          if (userData.role === 'superadmin' || userData.role === UserRole.SUPERADMIN) {
+            userRole = UserRole.SUPERADMIN;
+          } else if (userData.role === 'teacher' || userData.role === UserRole.TEACHER) {
+            userRole = UserRole.TEACHER;
+          } else if (userData.role === 'student' || userData.role === UserRole.STUDENT_5 || userData.role === UserRole.STUDENT_6) {
+            userRole = userData.level === '6' ? UserRole.STUDENT_6 : UserRole.STUDENT_5;
+          }
 
-            let finalUid = userDoc.id;
+          let finalUid = userDoc.id;
 
-            // Secure dual-sync with Firebase Authentication upon logging in
-            if (isFirebaseAvailable && auth) {
-              const email = `${trimmedUsername}@qasmi.com`;
+          // Secure dual-sync with Firebase Authentication upon logging in
+          if (isFirebaseAvailable && auth) {
+            const email = `${trimmedUsername}@qasmi.com`;
+            try {
+              console.log(`[dbService Auth] Dynamic Sync: Attempting authentication sign-in for: ${email}`);
+              await signInWithEmailAndPassword(auth, email, password);
+              console.log(`[dbService Auth] Authentication successful. UID matches: ${auth.currentUser?.uid}`);
+            } catch (signInErr: any) {
+              console.warn("[dbService Auth] User credentials match Firestore but Auth record is missing/mismatched. Registering dynamically now:", signInErr);
               try {
-                console.log(`[dbService Auth] Dynamic Sync: Attempting authentication sign-in for: ${email}`);
-                await signInWithEmailAndPassword(auth, email, password);
-                console.log(`[dbService Auth] Authentication successful. UID matches: ${auth.currentUser?.uid}`);
-              } catch (signInErr: any) {
-                console.warn("[dbService Auth] User credentials match Firestore but Auth record is missing/mismatched. Registering dynamically now:", signInErr);
-                try {
-                  const authUid = await createAuthUserSafely(trimmedUsername, password);
-                  if (authUid) {
-                    finalUid = authUid;
-                    // Transfer and save the profile document with the exact Auth user uid
-                    await setDoc(doc(db, 'users', authUid), { ...userData, id: authUid, uid: authUid }, { merge: true });
-                    
-                    // If the old record was using a placeholder ID, delete it to prevent leftovers
-                    if (userDoc.id !== authUid) {
-                      try {
-                        await deleteDoc(doc(db, 'users', userDoc.id));
-                        console.log(`[dbService Auth] Cleaned up legacy doc ID: ${userDoc.id}`);
-                      } catch (deleteErr) {
-                        console.warn("[dbService Auth] Failed to prune legacy fallback document, skipping:", deleteErr);
-                      }
+                const authUid = await createAuthUserSafely(trimmedUsername, password);
+                if (authUid) {
+                  finalUid = authUid;
+                  // Transfer and save the profile document with the exact Auth user uid
+                  await setDoc(doc(db, 'users', authUid), { ...userData, id: authUid, uid: authUid }, { merge: true });
+                  
+                  // If the old record was using a placeholder ID, delete it to prevent leftovers
+                  if (userDoc.id !== authUid) {
+                    try {
+                      await deleteDoc(doc(db, 'users', userDoc.id));
+                      console.log(`[dbService Auth] Cleaned up legacy doc ID: ${userDoc.id}`);
+                    } catch (deleteErr) {
+                      console.warn("[dbService Auth] Failed to prune legacy fallback document, skipping:", deleteErr);
                     }
-                    
-                    // Proceed with standard Auth login block
-                    await signInWithEmailAndPassword(auth, email, password);
-                    console.log("[dbService Auth] Dynamic Sync: Registration and authentication logged in successfully.");
                   }
-                } catch (regErr) {
-                  console.error("[dbService Auth] Failed dynamic user-sync registration in Firebase Auth:", regErr);
+                  
+                  // Proceed with standard Auth login block
+                  await signInWithEmailAndPassword(auth, email, password);
+                  console.log("[dbService Auth] Dynamic Sync: Registration and authentication logged in successfully.");
                 }
+              } catch (regErr) {
+                console.error("[dbService Auth] Failed dynamic user-sync registration in Firebase Auth:", regErr);
               }
             }
-
-            const session: UserSession = {
-              uid: finalUid,
-              username: userData.username,
-              role: userRole,
-              displayName: userData.displayName || userData.username,
-              level: userData.level,
-              subject: userData.subject || '',
-              assignedClasses: userData.assignedClasses || []
-            };
-            localStorage.setItem('edu_session', JSON.stringify(session));
-            return session;
           }
+
+          const session: UserSession = {
+            uid: finalUid,
+            username: userData.username,
+            role: userRole,
+            displayName: userData.displayName || userData.username,
+            level: userData.level,
+            subject: userData.subject || '',
+            assignedClasses: userData.assignedClasses || []
+          };
+          localStorage.setItem('edu_session', JSON.stringify(session));
+          return session;
+        } else {
+          throw new Error("كلمة المرور المدخلة غير صحيحة.");
         }
-      } catch (err: any) {
-        if (err instanceof Error && err.message === 'بيانات الحساب غير مكتملة، يرجى تحديث بيانات هذا المستخدم') {
-          throw err;
-        }
-        console.warn("Secure Firebase login check encountered error; attempting local fallback:", err);
+      } else {
+        throw new Error("اسم المستخدم المدخل غير مسجل لدينا في قاعدة البيانات.");
       }
     }
 
-    // 2. Offline / Local Fallback Mode
+    // 2. Offline / Local Fallback Mode (Only active if Firebase isn't configured/connected)
     const localUsers = getLocalItems<any>('edu_users_all');
     
     // Auto-seed offline store with default superadmin and original fallbacks for local compatibility
@@ -553,30 +551,13 @@ export const dbService = {
           console.log(`[dbService] getAllUsers parsed doc:`, { id: userObj.id, username: userObj.username, role: userObj.role });
           return userObj;
         });
-        
-        // Safely cache and merge local changes
-        const localUsers = getLocalItems<any>('edu_users_all');
-        console.log(`[dbService] getAllUsers merging cache. Cached user count: ${localUsers.length}`);
-        
-        firebaseUsers.forEach(fUser => {
-          const idx = localUsers.findIndex(u => u.id === fUser.id || u.username === fUser.username);
-          if (idx !== -1) {
-            localUsers[idx] = { ...localUsers[idx], ...fUser };
-          } else {
-            localUsers.push(fUser);
-          }
-        });
-        
-        saveLocalItems('edu_users_all', localUsers);
-        console.log(`[dbService] getAllUsers: completed fetching and merging. Returning ${localUsers.length} total user accounts.`);
-        return localUsers;
+        return firebaseUsers;
       } catch (error) {
-        console.error("[dbService] Error fetching users from Firestore. Reverting to cached local storage:", error);
-        return getLocalItems<any>('edu_users_all');
+        console.error("[dbService] Error fetching users from Firestore:", error);
       }
     }
     
-    // Fallback seed if local storage user list is completely empty
+    // Fallback seed ONLY if isFirebaseAvailable is false
     const local = getLocalItems<any>('edu_users_all');
     console.log(`[dbService] getAllUsers fallback check. Firebase offline. Local storage user count: ${local.length}`);
     if (local.length === 0) {
@@ -646,13 +627,14 @@ export const dbService = {
       try {
         await setDoc(doc(db, 'users', uid), payload, { merge: true });
         console.log(`[dbService] Successfully wrote document to Firestore path: ${logPath}`);
+        return; // single source of truth - bypass local storage writing when online
       } catch (error) {
         console.error(`[dbService] Firestore document write failure for ${logPath}:`, error);
         handleFirestoreError(error, OperationType.WRITE, logPath);
       }
     }
 
-    // Sync to unified local storage
+    // Sync to unified local storage ONLY in fallback offline mode
     const localUsers = getLocalItems<any>('edu_users_all');
     const existingIndex = localUsers.findIndex(u => u.id === uid || u.username === payload.username);
     if (existingIndex !== -1) {
@@ -661,7 +643,7 @@ export const dbService = {
       localUsers.push({ id: uid, ...payload });
     }
     saveLocalItems('edu_users_all', localUsers);
-    console.log(`[dbService] Local cache 'edu_users_all' synced. Total count: ${localUsers.length}`);
+    console.log(`[dbService] Local fallback cache 'edu_users_all' synced. Total count: ${localUsers.length}`);
 
     // Backward compatibility sync with existing student list if student
     if (user.role === 'student') {
@@ -684,7 +666,6 @@ export const dbService = {
          localStudentAccounts.push(studPayload);
       }
       saveLocalItems('edu_student_accounts', localStudentAccounts);
-      console.log(`[dbService] Local student cache synced. Total count: ${localStudentAccounts.length}`);
     }
   },
 
@@ -702,12 +683,13 @@ export const dbService = {
           password: trimmedPassword,
           updatedAt: new Date().toISOString()
         }, { merge: true });
+        return; // single source of truth - bypass localStorage
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, logPath);
       }
     }
 
-    // Update in local storage ('edu_users_all')
+    // Update in local storage ('edu_users_all') ONLY if offline fallback
     const localUsers = getLocalItems<any>('edu_users_all');
     const userIndex = localUsers.findIndex(u => u.id === userId);
     if (userIndex !== -1) {
@@ -731,12 +713,13 @@ export const dbService = {
     if (isFirebaseAvailable) {
       try {
         await deleteDoc(doc(db, 'users', uid));
+        return; // single source of truth - bypass localStorage
       } catch (error) {
         handleFirestoreError(error, OperationType.DELETE, logPath);
       }
     }
 
-    // Sync local
+    // Sync local ONLY if offline
     const localUsers = getLocalItems<any>('edu_users_all');
     const updatedUsers = localUsers.filter(u => u.id !== uid);
     saveLocalItems('edu_users_all', updatedUsers);
@@ -1267,18 +1250,34 @@ export const dbService = {
         }
         const snapshot = await getDocs(q);
         firebaseUsers = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      } catch (error) {
-        const errMessage = error instanceof Error ? error.message : String(error);
-        if (errMessage.includes('offline') || errMessage.includes('Failed to get document') || errMessage.includes('Failed to get documents') || errMessage.includes('network') || errMessage.includes('unreachable')) {
-          deactivateFirebase();
-          console.warn("Firestore is offline while loading student accounts. Falling back to local storage.");
-        } else {
-          console.warn("Firestore error loading student accounts:", error);
+
+        // Single Source of Truth: In online mode, map and return database accounts exclusively
+        const dbList = firebaseUsers.filter(fUser => {
+          return fUser.role !== UserRole.TEACHER && fUser.username !== 'teacher' && fUser.username !== 'custom_teacher' && fUser.id !== 'custom_teacher';
+        }).map(fUser => {
+          const username = fUser.username || fUser.id.replace('uid_', '');
+          return {
+            id: fUser.id || `uid_${username}`,
+            username: username,
+            displayName: fUser.displayName || 'تلميذ غير مسمى',
+            level: fUser.level || '5',
+            password: fUser.password || '123456',
+            notes: fUser.notes || '',
+            role: fUser.role || 'student',
+            ...(fUser as any)
+          };
+        });
+
+        if (level) {
+          return dbList.filter(acc => acc.level === level);
         }
+        return dbList;
+      } catch (error) {
+        console.warn("Firestore error loading student accounts:", error);
       }
     }
 
-    // Default built-in seed accounts for displaying & logging
+    // Default built-in seed accounts for displaying & logging ONLY in offline fallback
     const seedAccounts = [
       { id: 'uid_student5', username: 'student5', displayName: 'تلميذ(ة) المستوى الخامس ابتدائي', level: '5' as const, password: 'primary5', role: 'student' },
       { id: 'uid_student6', username: 'student6', displayName: 'تلميذ(ة) المستوى السادس ابتدائي', level: '6' as const, password: 'primary6', role: 'student' },
@@ -1300,22 +1299,6 @@ export const dbService = {
     }
     
     localAccounts.forEach(acc => allAccountsMap.set(acc.id, { role: 'student', ...acc }));
-
-    firebaseUsers.forEach(fUser => {
-      if (fUser.role !== UserRole.TEACHER && fUser.username !== 'teacher' && fUser.username !== 'custom_teacher' && fUser.id !== 'custom_teacher') {
-        const username = fUser.username || fUser.id.replace('uid_', '');
-        allAccountsMap.set(fUser.id || `uid_${username}`, {
-          id: fUser.id || `uid_${username}`,
-          username: username,
-          displayName: fUser.displayName || 'تلميذ غير مسمى',
-          level: fUser.level || '5',
-          password: fUser.password || '123456',
-          notes: fUser.notes || '',
-          role: fUser.role || 'student',
-          ...(fUser as any)
-        });
-      }
-    });
 
     const list = Array.from(allAccountsMap.values());
     if (level) {
@@ -1359,13 +1342,14 @@ export const dbService = {
       try {
         await setDoc(doc(db, 'users', uid), payload, { merge: true });
         console.log(`[dbService] Document written successfully to Firestore path for student: ${logPath}`);
+        return payload; // single source of truth - bypass local storage writing when online
       } catch (error) {
         console.error(`[dbService] Firestore document write failure for student ${logPath}:`, error);
         handleFirestoreError(error, OperationType.WRITE, logPath);
       }
     }
 
-    // Sync to local student accounts storage
+    // Sync to local student accounts storage ONLY to compile with offline mode fallback
     const localAccounts = getLocalItems<any>('edu_student_accounts');
     const existingIndex = localAccounts.findIndex(acc => acc.id === uid);
     const item = { id: uid, ...payload };
@@ -1375,7 +1359,6 @@ export const dbService = {
       localAccounts.push(item);
     }
     saveLocalItems('edu_student_accounts', localAccounts);
-    console.log(`[dbService] Local student accounts cache synced. Total count: ${localAccounts.length}`);
 
     // Sync to legacy/unified local storage
     const localUsers = getLocalItems<any>('edu_users_all');
@@ -1386,7 +1369,6 @@ export const dbService = {
       localUsers.push({ id: uid, ...payload });
     }
     saveLocalItems('edu_users_all', localUsers);
-    console.log(`[dbService] Unified local users cache synced. Total count: ${localUsers.length}`);
 
     // Sync to local notes storage
     const localNotes = getLocalItems<any>('edu_student_notes');
@@ -1394,7 +1376,6 @@ export const dbService = {
     if (existingNoteIndex === -1) {
       localNotes.push({ id: uid, username: username.trim(), displayName: displayName.trim(), level, notes: '', role: 'student' });
       saveLocalItems('edu_student_notes', localNotes);
-      console.log("[dbService] Local student notes initialized.");
     }
 
     return item;
@@ -1405,12 +1386,13 @@ export const dbService = {
     if (isFirebaseAvailable) {
       try {
         await deleteDoc(doc(db, 'users', uid));
+        return; // single source of truth - bypass local storage writing when online
       } catch (error) {
         handleFirestoreError(error, OperationType.DELETE, logPath);
       }
     }
 
-    // Sync local accounts
+    // Sync local accounts ONLY when offline
     const localAccounts = getLocalItems<any>('edu_student_accounts');
     const updatedAccounts = localAccounts.filter((acc: any) => acc.id !== uid);
     saveLocalItems('edu_student_accounts', updatedAccounts);
@@ -1424,6 +1406,81 @@ export const dbService = {
     const localNotes = getLocalItems<any>('edu_student_notes');
     const updatedNotes = localNotes.filter((n: any) => n.id !== uid);
     saveLocalItems('edu_student_notes', updatedNotes);
+  },
+
+  subscribeAllUsers: (onUpdate: (users: any[]) => void) => {
+    if (!isFirebaseAvailable) {
+      dbService.getAllUsers().then(onUpdate);
+      return () => {};
+    }
+
+    const q = query(collection(db, 'users'));
+    return onSnapshot(q, (snapshot) => {
+      const usersList = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        let derivedRole = data.role || 'student';
+        if (data.username === 'superadmin') derivedRole = 'superadmin';
+        if (data.username === 'teacher') derivedRole = 'teacher';
+        return {
+          id: docSnap.id,
+          uid: docSnap.id,
+          role: derivedRole,
+          ...data
+        };
+      });
+      onUpdate(usersList);
+    }, (err) => {
+      console.error("Error subscribing to all users in real-time:", err);
+    });
+  },
+
+  subscribeStudentsForTeacher: (teacherUid: string, onUpdate: (students: any[]) => void) => {
+    if (!isFirebaseAvailable) {
+      dbService.getStudentsForTeacher(teacherUid).then(onUpdate);
+      return () => {};
+    }
+
+    let unsubscribeStudents: (() => void) | null = null;
+    let assignedClasses: string[] = [];
+
+    const unsubscribeTeacher = onSnapshot(doc(db, 'users', teacherUid), (teacherSnap) => {
+      if (teacherSnap.exists()) {
+        const teacherData = teacherSnap.data();
+        assignedClasses = teacherData.assignedClasses || [];
+      } else {
+        assignedClasses = [];
+      }
+
+      if (unsubscribeStudents) unsubscribeStudents();
+      
+      const q = query(collection(db, 'users'), where('role', '==', 'student'));
+      unsubscribeStudents = onSnapshot(q, (snapshot) => {
+        const list: any[] = [];
+        snapshot.docs.forEach(docSnap => {
+          const detail = docSnap.data();
+          if (assignedClasses.includes(detail.level)) {
+            list.push({
+              id: docSnap.id,
+              uid: docSnap.id,
+              username: detail.username,
+              displayName: detail.displayName,
+              level: detail.level,
+              password: detail.password || '',
+              notes: detail.notes || '',
+              role: 'student'
+            });
+          }
+        });
+        onUpdate(list);
+      });
+    }, (err) => {
+      console.error("Error subscribing to teacher's profile in real-time:", err);
+    });
+
+    return () => {
+      unsubscribeTeacher();
+      if (unsubscribeStudents) unsubscribeStudents();
+    };
   },
 
   getStudentsForTeacher: async (teacherUid: string): Promise<any[]> => {

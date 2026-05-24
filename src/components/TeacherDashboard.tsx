@@ -769,10 +769,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       const abData = await dbService.getAbsences();
       const docsData = await dbService.getDocuments();
       let notesData: any[] = [];
-      let accountsData: any[] = [];
       try {
         notesData = await dbService.getStudentNotes();
-        accountsData = await dbService.getStudentsForTeacher(session.uid);
       } catch (notesErr) {
         console.error("Error loading student notes in teacher dashboard:", notesErr);
       }
@@ -799,7 +797,6 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       const assignedLevels = session.assignedClasses || [];
       const filteredNotes = (notesData || []).filter(note => assignedLevels.includes(note.level));
       setStudentNotes(filteredNotes);
-      setStudentAccounts(accountsData || []);
     } catch (e) {
       console.error("خطأ أثناء جلب السجلات التربوية والوثائق:", e);
     } finally {
@@ -809,7 +806,16 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
 
   useEffect(() => {
     loadAllData();
-  }, []);
+
+    // Stream student list in real-time matching this teacher's classes
+    const unsubscribe = dbService.subscribeStudentsForTeacher(session.uid, (students) => {
+      setStudentAccounts(students);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [session.uid]);
 
   // Announcements actions
   const handleAddAnnouncement = async (e: FormEvent) => {

@@ -79,19 +79,15 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
   const [isSavingSchool, setIsSavingSchool] = useState<boolean>(false);
 
   const fetchUsersList = async () => {
-    setLoading(true);
-    try {
-      const allUsers = await dbService.getAllUsers();
-      setUsers(allUsers);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    // Retained as clean signature: live state updates are managed instantly by subscribeAllUsers subscription below
   };
 
   useEffect(() => {
-    fetchUsersList();
+    setLoading(true);
+    const unsubscribe = dbService.subscribeAllUsers((allUsers) => {
+      setUsers(allUsers);
+      setLoading(false);
+    });
     
     // Load school name setting
     const loadSchool = async () => {
@@ -103,6 +99,10 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
       }
     };
     loadSchool();
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleSaveSchoolName = async () => {
