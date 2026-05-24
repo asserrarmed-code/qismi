@@ -76,7 +76,7 @@ export default function App() {
         id="programmer-signature-footer"
         className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-md border-t border-slate-800 text-slate-400 py-3.5 px-4 text-center text-[10px] font-bold leading-relaxed shadow-2xl select-none opacity-80 hover:opacity-100 transition-opacity duration-300"
       >
-        بوابة التدريس المدمجة | تصميم وبرمجة مهندس البرمجيات المتخصص في التطبيقات التعليمية والربط السحابي بقواعد Firebase © 2026
+        فضاء التواصل بين التلميذ و الأستاذ | تصميم وبرمجة: محمد أسرار - مدرسة ميمونة أم المؤمنين - مديرية مراكش © 2026
       </footer>
     </div>
   );

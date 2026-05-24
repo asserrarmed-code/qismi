@@ -1576,7 +1576,7 @@ export const dbService = {
         console.warn("Error fetching school name from Firebase:", err);
       }
     }
-    return localStorage.getItem('edu_school_name') || 'مدرستنا الابتدائية الرقمية';
+    return localStorage.getItem('edu_school_name') || 'مدرسة ميمونة أم المؤمنين';
   },
 
   saveSchoolName: async (schoolName: string): Promise<void> => {

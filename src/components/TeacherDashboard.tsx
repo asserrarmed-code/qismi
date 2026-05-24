@@ -741,9 +741,9 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     try {
       try {
         const sName = await dbService.getSchoolName();
-        setSchoolName(sName || 'مدرستنا الابتدائية الرقمية');
+        setSchoolName(sName || 'مدرسة ميمونة أم المؤمنين');
       } catch (schoolErr) {
-        setSchoolName('مدرستنا الابتدائية الرقمية');
+        setSchoolName('مدرسة ميمونة أم المؤمنين');
       }
 
       const exData = await dbService.getExercises();

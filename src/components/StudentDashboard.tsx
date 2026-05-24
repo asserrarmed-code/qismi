@@ -162,10 +162,10 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
         // 1. Fetch school name
         try {
           const sName = await dbService.getSchoolName();
-          setSchoolName(sName || 'مدرستنا الابتدائية الرقمية');
+          setSchoolName(sName || 'مدرسة ميمونة أم المؤمنين');
         } catch (schoolErr) {
           console.error("Error retrieving school name:", schoolErr);
-          setSchoolName('مدرستنا الابتدائية الرقمية');
+          setSchoolName('مدرسة ميمونة أم المؤمنين');
         }
 
         // 2. Fetch student's own display name from profile
