@@ -19,6 +19,9 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, isFirebaseAvailable, auth, storage, deactivateFirebase } from './firebase';
+import { initializeApp, getApps } from 'firebase/app';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, getAuth } from 'firebase/auth';
+import firebaseConfig from '../firebase-applet-config.json';
 import { UserRole, UserSession, Exercise, Score, Absence, EduDocument } from '../types';
 
 enum OperationType {
@@ -79,6 +82,48 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.warn('Firestore Error Details: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
+
+// Helper to safely create Firebase Auth account with username/password without signing out the admin
+const createAuthUserSafely = async (username: string, password: string): Promise<string | null> => {
+  if (!isFirebaseAvailable || !auth) {
+    console.log("[dbService Auth] Firebase is disabled or unconfigured. Creating local/offline record.");
+    return null;
+  }
+  try {
+    const trimmedUser = username.trim().toLowerCase();
+    const email = `${trimmedUser}@qasmi.com`;
+    console.log(`[dbService Auth] Attempting Auth dual-write creation for email: ${email}`);
+    
+    // Construct finalConfig as in firebase.ts
+    const finalConfig = {
+      apiKey: (import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig?.apiKey || "").trim(),
+      authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig?.authDomain || "").trim(),
+      projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig?.projectId || "").trim(),
+      storageBucket: (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig?.storageBucket || "").trim(),
+      messagingSenderId: (import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig?.messagingSenderId || "").trim(),
+      appId: (import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig?.appId || "").trim(),
+    };
+    
+    // Initialize secondary app
+    const secondaryApp = getApps().find(app => app.name === 'tempAuthApp') || initializeApp(finalConfig, 'tempAuthApp');
+    const secondaryAuth = getAuth(secondaryApp);
+    
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const user = userCredential.user;
+    console.log(`[dbService Auth] Successfully created Firebase Auth user. UID: ${user.uid}`);
+    
+    // Sign out key from secondary auth to avoid session overlap
+    await secondaryAuth.signOut();
+    return user.uid;
+  } catch (error: any) {
+    if (error.code === 'auth/email-already-in-use') {
+      console.warn("[dbService Auth] Email already in use in Firebase Auth. Proceeding with matching Firestore write.");
+      return null;
+    }
+    console.error("[dbService Auth] Error in dual-write Firebase Auth creation:", error);
+    throw new Error(`خطأ أثناء إنشاء حساب المصادقة: ${error.message}`);
+  }
+};
 
 // Prefabricated accounts registry - set to empty array under Super Admin System as requested
 export const PRE_CREATED_ACCOUNTS: any[] = [];
@@ -451,46 +496,56 @@ export const dbService = {
   getAllUsers: async (): Promise<any[]> => {
     const logPath = 'users';
     let firebaseUsers: any[] = [];
+    console.log("[dbService] getAllUsers: Start fetching users from Firestore...");
     if (isFirebaseAvailable) {
       try {
         const snapshot = await getDocs(collection(db, logPath));
+        console.log(`[dbService] getAllUsers: Successfully fetched ${snapshot.size} documents from Firestore.`);
         firebaseUsers = snapshot.docs.map(docSnap => {
-          const data = docSnap.data();
+          const data = docSnap.data() as any;
           let derivedRole = data.role || 'student';
           if (data.username === 'superadmin') derivedRole = 'superadmin';
           if (data.username === 'teacher') derivedRole = 'teacher';
-          return {
+          const userObj: any = {
             id: docSnap.id,
+            uid: docSnap.id,
             role: derivedRole,
             ...data
           };
+          console.log(`[dbService] getAllUsers parsed doc:`, { id: userObj.id, username: userObj.username, role: userObj.role });
+          return userObj;
         });
         
-        // Safely cache to local storage by MERGING rather than overwriting completely, protecting local creations
-        if (firebaseUsers.length > 0) {
-          const localUsers = getLocalItems<any>('edu_users_all');
-          firebaseUsers.forEach(fUser => {
-            const idx = localUsers.findIndex(u => u.id === fUser.id || u.username === fUser.username);
-            if (idx !== -1) {
-              localUsers[idx] = { ...localUsers[idx], ...fUser };
-            } else {
-              localUsers.push(fUser);
-            }
-          });
-          saveLocalItems('edu_users_all', localUsers);
-        }
-        return firebaseUsers.length > 0 ? firebaseUsers : getLocalItems<any>('edu_users_all');
+        // Safely cache and merge local changes
+        const localUsers = getLocalItems<any>('edu_users_all');
+        console.log(`[dbService] getAllUsers merging cache. Cached user count: ${localUsers.length}`);
+        
+        firebaseUsers.forEach(fUser => {
+          const idx = localUsers.findIndex(u => u.id === fUser.id || u.username === fUser.username);
+          if (idx !== -1) {
+            localUsers[idx] = { ...localUsers[idx], ...fUser };
+          } else {
+            localUsers.push(fUser);
+          }
+        });
+        
+        saveLocalItems('edu_users_all', localUsers);
+        console.log(`[dbService] getAllUsers: completed fetching and merging. Returning ${localUsers.length} total user accounts.`);
+        return localUsers;
       } catch (error) {
-        console.warn("Firestore error in getAllUsers fallback to local:", error);
+        console.error("[dbService] Error fetching users from Firestore. Reverting to cached local storage:", error);
+        return getLocalItems<any>('edu_users_all');
       }
     }
     
     // Fallback seed if local storage user list is completely empty
     const local = getLocalItems<any>('edu_users_all');
+    console.log(`[dbService] getAllUsers fallback check. Firebase offline. Local storage user count: ${local.length}`);
     if (local.length === 0) {
       const defaultList = [
         {
           id: 'uid_superadmin',
+          uid: 'uid_superadmin',
           username: 'superadmin',
           password: 'superadmin2026',
           displayName: 'المشرف العام للمنصة',
@@ -501,6 +556,7 @@ export const dbService = {
       return defaultList;
     }
     return local.map(u => ({
+      uid: u.uid || u.id || `uid_${u.username}`,
       role: u.role || (u.username === 'superadmin' ? 'superadmin' : u.username === 'teacher' ? 'teacher' : 'student'),
       ...u
     }));
@@ -517,10 +573,25 @@ export const dbService = {
     subject?: string;
     assignedClasses?: string[];
   }): Promise<void> => {
-    const uid = user.id || `uid_${user.username.trim().toLowerCase()}`;
-    const logPath = `users/${uid}`;
+    console.log("[dbService] saveUserAccount triggered for user:", user);
+    let uid = user.id || `uid_${user.username.trim().toLowerCase()}`;
     
+    if (isFirebaseAvailable) {
+      try {
+        console.log(`[dbService] Dual-write active: creating Authentication account for: ${user.username}`);
+        const authUid = await createAuthUserSafely(user.username, user.password);
+        if (authUid) {
+          console.log(`[dbService] Auth account created successfully with UID: ${authUid}. Overriding destination ID.`);
+          uid = authUid;
+        }
+      } catch (authErr) {
+        console.error("[dbService] Firebase Auth dual-write creation failed, falling back to custom state:", authErr);
+      }
+    }
+
+    const logPath = `users/${uid}`;
     const payload = {
+      uid: uid,
       username: user.username.trim().toLowerCase(),
       displayName: user.displayName.trim(),
       role: user.role,
@@ -531,10 +602,14 @@ export const dbService = {
       updatedAt: new Date().toISOString()
     };
     
+    console.log(`[dbService] saveUserAccount payload for Firestore doc ${uid}:`, payload);
+    
     if (isFirebaseAvailable) {
       try {
         await setDoc(doc(db, 'users', uid), payload, { merge: true });
+        console.log(`[dbService] Successfully wrote document to Firestore path: ${logPath}`);
       } catch (error) {
+        console.error(`[dbService] Firestore document write failure for ${logPath}:`, error);
         handleFirestoreError(error, OperationType.WRITE, logPath);
       }
     }
@@ -548,6 +623,7 @@ export const dbService = {
       localUsers.push({ id: uid, ...payload });
     }
     saveLocalItems('edu_users_all', localUsers);
+    console.log(`[dbService] Local cache 'edu_users_all' synced. Total count: ${localUsers.length}`);
 
     // Backward compatibility sync with existing student list if student
     if (user.role === 'student') {
@@ -555,6 +631,7 @@ export const dbService = {
       const idx = localStudentAccounts.findIndex(u => u.id === uid);
       const studPayload = {
          id: uid,
+         uid: uid,
          username: user.username.trim().toLowerCase(),
          displayName: user.displayName.trim(),
          level: user.level || '5',
@@ -569,6 +646,7 @@ export const dbService = {
          localStudentAccounts.push(studPayload);
       }
       saveLocalItems('edu_student_accounts', localStudentAccounts);
+      console.log(`[dbService] Local student cache synced. Total count: ${localStudentAccounts.length}`);
     }
   },
 
@@ -1208,10 +1286,25 @@ export const dbService = {
   },
 
   addStudentAccount: async (displayName: string, level: '5' | '6', username: string, password: string): Promise<any> => {
-    const uid = `uid_${username.trim().toLowerCase()}`;
-    const logPath = `users/${uid}`;
+    console.log("[dbService] addStudentAccount triggered for student:", { displayName, level, username });
+    let uid = `uid_${username.trim().toLowerCase()}`;
     
+    if (isFirebaseAvailable) {
+      try {
+        console.log(`[dbService] Dual-write active: creating Authentication account for student: ${username}`);
+        const authUid = await createAuthUserSafely(username, password);
+        if (authUid) {
+          console.log(`[dbService] Auth account created successfully with UID: ${authUid}. Overriding destination ID.`);
+          uid = authUid;
+        }
+      } catch (authErr) {
+        console.error("[dbService] Firebase Auth dual-write creation failed for student, falling back to custom state:", authErr);
+      }
+    }
+
+    const logPath = `users/${uid}`;
     const payload = {
+      uid: uid,
       username: username.trim().toLowerCase(),
       displayName: displayName.trim(),
       level,
@@ -1221,10 +1314,14 @@ export const dbService = {
       createdAt: new Date().toISOString()
     };
 
+    console.log(`[dbService] addStudentAccount payload for Firestore doc ${uid}:`, payload);
+
     if (isFirebaseAvailable) {
       try {
         await setDoc(doc(db, 'users', uid), payload, { merge: true });
+        console.log(`[dbService] Document written successfully to Firestore path for student: ${logPath}`);
       } catch (error) {
+        console.error(`[dbService] Firestore document write failure for student ${logPath}:`, error);
         handleFirestoreError(error, OperationType.WRITE, logPath);
       }
     }
@@ -1239,8 +1336,9 @@ export const dbService = {
       localAccounts.push(item);
     }
     saveLocalItems('edu_student_accounts', localAccounts);
+    console.log(`[dbService] Local student accounts cache synced. Total count: ${localAccounts.length}`);
 
-    // Sync to legacy/unified local storage for authentication access fallback
+    // Sync to legacy/unified local storage
     const localUsers = getLocalItems<any>('edu_users_all');
     const existingUserIndex = localUsers.findIndex(u => u.id === uid || u.username === payload.username);
     if (existingUserIndex !== -1) {
@@ -1249,6 +1347,7 @@ export const dbService = {
       localUsers.push({ id: uid, ...payload });
     }
     saveLocalItems('edu_users_all', localUsers);
+    console.log(`[dbService] Unified local users cache synced. Total count: ${localUsers.length}`);
 
     // Sync to local notes storage
     const localNotes = getLocalItems<any>('edu_student_notes');
@@ -1256,6 +1355,7 @@ export const dbService = {
     if (existingNoteIndex === -1) {
       localNotes.push({ id: uid, username: username.trim(), displayName: displayName.trim(), level, notes: '', role: 'student' });
       saveLocalItems('edu_student_notes', localNotes);
+      console.log("[dbService] Local student notes initialized.");
     }
 
     return item;

@@ -31,18 +31,15 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setIsLoading(true);
 
-    if (!username.trim() || !password.trim()) {
-      setErrorMessage('الرجاء إدخال اسم المستخدم وكلمة المرور للولوج.');
-      setIsLoading(false);
-      return;
-    }
-
     try {
+      if (!username.trim() || !password.trim()) {
+        throw new Error('الرجاء إدخال اسم المستخدم وكلمة المرور للولوج.');
+      }
       const session = await dbService.login(username, password);
       onLoginSuccess(session);
     } catch (error: any) {
@@ -141,7 +138,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </motion.div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-5">
             <div className="space-y-1.5">
               <label className="block text-xs font-black text-slate-700">
                 اسم مستخدم الحساب المعتمد:
