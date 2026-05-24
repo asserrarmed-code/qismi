@@ -127,6 +127,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   const [activeTab, setActiveTab] = useState<'exercises' | 'scores' | 'absences' | 'documents' | 'notes' | 'accounts' | 'settings'>('exercises');
 
   const [isLoading, setIsLoading] = useState(true);
+  const [schoolName, setSchoolName] = useState<string>('');
 
   // Student Notes Management States
   const [studentNotes, setStudentNotes] = useState<{ id: string; username: string; displayName: string; level: '5' | '6'; notes: string }[]>([]);
@@ -738,6 +739,13 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   const loadAllData = async () => {
     setIsLoading(true);
     try {
+      try {
+        const sName = await dbService.getSchoolName();
+        setSchoolName(sName || 'مدرستنا الابتدائية الرقمية');
+      } catch (schoolErr) {
+        setSchoolName('مدرستنا الابتدائية الرقمية');
+      }
+
       const exData = await dbService.getExercises();
       const scData = await dbService.getScores();
       const abData = await dbService.getAbsences();
@@ -1144,11 +1152,15 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
         <div className="absolute left-20 bottom-0 w-24 h-24 bg-sky-300/35 rounded-full blur-xl pointer-events-none" />
 
         <div className="space-y-3 relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/15 border border-white/20 rounded-full backdrop-blur-md">
-            <span className="h-2 w-2 rounded-full bg-emerald-350 animate-pulse" />
-            <Smile className="h-3.5 w-3.5 text-amber-300" />
+          <div className="inline-flex flex-wrap items-center gap-2 px-3 py-1.5 bg-white/15 border border-white/20 rounded-full backdrop-blur-md">
+            <span className="h-2 w-2 rounded-full bg-emerald-450 animate-pulse" />
+            <Smile className="h-3.5 w-3.5 text-amber-350" />
             <span className="text-[10px] font-black text-amber-200 uppercase tracking-wider">
-              بوابة الإدارة التربوية والأساتذة من السحابة
+              {schoolName}
+            </span>
+            <span className="text-[10px] text-white/40">|</span>
+            <span className="text-[10px] font-bold text-sky-100 uppercase tracking-wider">
+              بوابة الأساتذة والإدارة التربوية
             </span>
           </div>
           
