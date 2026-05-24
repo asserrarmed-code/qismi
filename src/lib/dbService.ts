@@ -346,106 +346,130 @@ export const dbService = {
 
     // 1. If Firebase is active, we check credentials and roles SECURELY via Firestore query directly
     if (isFirebaseAvailable) {
-      // Auto-seed default superadmin into Firestore if first-time empty login
-      if (trimmedUsername === 'superadmin') {
-        const docRef = doc(db, 'users', 'uid_superadmin');
-        let checkDoc;
-        try {
-          checkDoc = await getDocFromServer(docRef);
-        } catch {
-          checkDoc = await getDoc(docRef);
-        }
-        if (!checkDoc.exists()) {
-          await setDoc(docRef, {
-            username: 'superadmin',
-            password: 'superadmin2026',
-            displayName: 'المشرف العام للمنصة',
-            role: 'superadmin',
-            createdAt: new Date().toISOString()
-          });
-          console.log("Seeded default superadmin user inside Firestore collection.");
-        }
-      }
-
-      // Query database directly for this exact user using getDocsFromServer to force refresh (bypass cache)
-      const q = query(collection(db, 'users'), where('username', '==', trimmedUsername));
-      const snapshot = await getDocsFromServer(q);
-      
-      if (!snapshot.empty) {
-        const userDoc = snapshot.docs[0];
-        const userData = userDoc.data();
-        
-        if (userData.password === password) {
-          // Check if role is missing or corrupt/invalid in Firestore
-          const validRoles = ['superadmin', 'teacher', 'student'];
-          const roleVal = userData.role ? String(userData.role).trim().toLowerCase() : '';
-          if (!roleVal || !validRoles.includes(roleVal)) {
-            throw new Error("بيانات الحساب غير مكتملة، يرجى تحديث بيانات هذا المستخدم");
-          }
-
-          let userRole: UserRole = UserRole.TEACHER;
-          if (userData.role === 'superadmin' || userData.role === UserRole.SUPERADMIN) {
-            userRole = UserRole.SUPERADMIN;
-          } else if (userData.role === 'teacher' || userData.role === UserRole.TEACHER) {
-            userRole = UserRole.TEACHER;
-          } else if (userData.role === 'student' || userData.role === UserRole.STUDENT_5 || userData.role === UserRole.STUDENT_6) {
-            userRole = userData.level === '6' ? UserRole.STUDENT_6 : UserRole.STUDENT_5;
-          }
-
-          let finalUid = userDoc.id;
-
-          // Secure dual-sync with Firebase Authentication upon logging in
-          if (isFirebaseAvailable && auth) {
-            const email = `${trimmedUsername}@qasmi.com`;
+      try {
+        // Auto-seed default superadmin into Firestore if first-time empty login
+        if (trimmedUsername === 'superadmin') {
+          const docRef = doc(db, 'users', 'uid_superadmin');
+          let checkDoc;
+          try {
+            checkDoc = await getDocFromServer(docRef);
+          } catch {
             try {
-              console.log(`[dbService Auth] Dynamic Sync: Attempting authentication sign-in for: ${email}`);
-              await signInWithEmailAndPassword(auth, email, password);
-              console.log(`[dbService Auth] Authentication successful. UID matches: ${auth.currentUser?.uid}`);
-            } catch (signInErr: any) {
-              console.warn("[dbService Auth] User credentials match Firestore but Auth record is missing/mismatched. Registering dynamically now:", signInErr);
-              try {
-                const authUid = await createAuthUserSafely(trimmedUsername, password);
-                if (authUid) {
-                  finalUid = authUid;
-                  // Transfer and save the profile document with the exact Auth user uid
-                  await setDoc(doc(db, 'users', authUid), { ...userData, id: authUid, uid: authUid }, { merge: true });
-                  
-                  // If the old record was using a placeholder ID, delete it to prevent leftovers
-                  if (userDoc.id !== authUid) {
-                    try {
-                      await deleteDoc(doc(db, 'users', userDoc.id));
-                      console.log(`[dbService Auth] Cleaned up legacy doc ID: ${userDoc.id}`);
-                    } catch (deleteErr) {
-                      console.warn("[dbService Auth] Failed to prune legacy fallback document, skipping:", deleteErr);
-                    }
-                  }
-                  
-                  // Proceed with standard Auth login block
-                  await signInWithEmailAndPassword(auth, email, password);
-                  console.log("[dbService Auth] Dynamic Sync: Registration and authentication logged in successfully.");
-                }
-              } catch (regErr) {
-                console.error("[dbService Auth] Failed dynamic user-sync registration in Firebase Auth:", regErr);
-              }
+              checkDoc = await getDoc(docRef);
+            } catch (err) {
+              console.warn("Field to query default superadmin via standard getDoc:", err);
             }
           }
-
-          const session: UserSession = {
-            uid: finalUid,
-            username: userData.username,
-            role: userRole,
-            displayName: userData.displayName || userData.username,
-            level: userData.level,
-            subject: userData.subject || '',
-            assignedClasses: userData.assignedClasses || []
-          };
-          localStorage.setItem('edu_session', JSON.stringify(session));
-          return session;
-        } else {
-          throw new Error("كلمة المرور المدخلة غير صحيحة.");
+          if (checkDoc && !checkDoc.exists()) {
+            await setDoc(docRef, {
+              username: 'superadmin',
+              password: 'superadmin2026',
+              displayName: 'المشرف العام للمنصة',
+              role: 'superadmin',
+              createdAt: new Date().toISOString()
+            });
+            console.log("Seeded default superadmin user inside Firestore collection.");
+          }
         }
-      } else {
-        throw new Error("اسم المستخدم المدخل غير مسجل لدينا في قاعدة البيانات.");
+
+        // Query database directly for this exact user using getDocsFromServer first with fallback to getDocs
+        const q = query(collection(db, 'users'), where('username', '==', trimmedUsername));
+        let snapshot;
+        try {
+          snapshot = await getDocsFromServer(q);
+        } catch (serverErr: any) {
+          console.warn("[dbService login] getDocsFromServer unreachable or offline; falling back to standard cached getDocs:", serverErr);
+          snapshot = await getDocs(q);
+        }
+        
+        if (!snapshot.empty) {
+          const userDoc = snapshot.docs[0];
+          const userData = userDoc.data();
+          
+          if (userData.password === password) {
+            // Check if role is missing or corrupt/invalid in Firestore
+            const validRoles = ['superadmin', 'teacher', 'student'];
+            const roleVal = userData.role ? String(userData.role).trim().toLowerCase() : '';
+            if (!roleVal || !validRoles.includes(roleVal)) {
+              throw new Error("بيانات الحساب غير مكتملة، يرجى تحديث بيانات هذا المستخدم");
+            }
+
+            let userRole: UserRole = UserRole.TEACHER;
+            if (userData.role === 'superadmin' || userData.role === UserRole.SUPERADMIN) {
+              userRole = UserRole.SUPERADMIN;
+            } else if (userData.role === 'teacher' || userData.role === UserRole.TEACHER) {
+              userRole = UserRole.TEACHER;
+            } else if (userData.role === 'student' || userData.role === UserRole.STUDENT_5 || userData.role === UserRole.STUDENT_6) {
+              userRole = userData.level === '6' ? UserRole.STUDENT_5 ? UserRole.STUDENT_6 : UserRole.STUDENT_6 : UserRole.STUDENT_5; 
+              // simplify:
+              userRole = userData.level === '6' ? UserRole.STUDENT_6 : UserRole.STUDENT_5;
+            }
+
+            let finalUid = userDoc.id;
+
+            // Secure dual-sync with Firebase Authentication upon logging in
+            if (isFirebaseAvailable && auth) {
+              const email = `${trimmedUsername}@qasmi.com`;
+              try {
+                console.log(`[dbService Auth] Dynamic Sync: Attempting authentication sign-in for: ${email}`);
+                await signInWithEmailAndPassword(auth, email, password);
+                console.log(`[dbService Auth] Authentication successful. UID matches: ${auth.currentUser?.uid}`);
+              } catch (signInErr: any) {
+                console.warn("[dbService Auth] User credentials match Firestore but Auth record is missing/mismatched. Registering dynamically now:", signInErr);
+                try {
+                  const authUid = await createAuthUserSafely(trimmedUsername, password);
+                  if (authUid) {
+                    finalUid = authUid;
+                    // Transfer and save the profile document with the exact Auth user uid
+                    await setDoc(doc(db, 'users', authUid), { ...userData, id: authUid, uid: authUid }, { merge: true });
+                    
+                    // If the old record was using a placeholder ID, delete it to prevent leftovers
+                    if (userDoc.id !== authUid) {
+                      try {
+                        await deleteDoc(doc(db, 'users', userDoc.id));
+                        console.log(`[dbService Auth] Cleaned up legacy doc ID: ${userDoc.id}`);
+                      } catch (deleteErr) {
+                        console.warn("[dbService Auth] Failed to prune legacy fallback document, skipping:", deleteErr);
+                      }
+                    }
+                    
+                    // Proceed with standard Auth login block
+                    await signInWithEmailAndPassword(auth, email, password);
+                    console.log("[dbService Auth] Dynamic Sync: Registration and authentication logged in successfully.");
+                  }
+                } catch (regErr) {
+                  console.error("[dbService Auth] Failed dynamic user-sync registration in Firebase Auth:", regErr);
+                }
+              }
+            }
+
+            const session: UserSession = {
+              uid: finalUid,
+              username: userData.username,
+              role: userRole,
+              displayName: userData.displayName || userData.username,
+              level: userData.level,
+              subject: userData.subject || '',
+              assignedClasses: userData.assignedClasses || []
+            };
+            localStorage.setItem('edu_session', JSON.stringify(session));
+            return session;
+          } else {
+            throw new Error("كلمة المرور المدخلة غير صحيحة.");
+          }
+        } else {
+          throw new Error("اسم المستخدم المدخل غير مسجل لدينا في قاعدة البيانات.");
+        }
+      } catch (err: any) {
+        // If the error message is an explicit login validation mismatch, bubble it up to let the user know
+        const validationKeywords = ["غير صحيح", "غير مسجل", "بيانات الحساب غير مكتملة", "المرور", "قاعدة البيانات"];
+        const errMsg = err?.message || String(err);
+        if (validationKeywords.some(kw => errMsg.includes(kw))) {
+          throw err;
+        }
+
+        console.error("[dbService login] Switch-Gate: Firestore error or offline state. Switching login attempt to offline state mode.", err);
+        deactivateFirebase(); // Dynamic switch to local fallback!
       }
     }
 
