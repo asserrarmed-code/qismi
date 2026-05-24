@@ -243,6 +243,40 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
     ex => selectedCategoryFilter === 'all' || ex.category === selectedCategoryFilter
   );
 
+  // Securely match student identifiers with database records
+  const matchStudent = (nameFromRecord: string) => {
+    if (!nameFromRecord) return false;
+    const cleanRecordName = nameFromRecord.trim().toLowerCase();
+    
+    const username = (session.username || '').trim().toLowerCase();
+    const displayName = (session.displayName || '').trim().toLowerCase();
+    const stateDisplayName = (profileDisplayName || '').trim().toLowerCase();
+    
+    // Exact match
+    if (cleanRecordName === username || cleanRecordName === displayName || cleanRecordName === stateDisplayName) {
+      return true;
+    }
+    
+    // Normalized comparison
+    const normRecord = cleanRecordName.replace(/\s+/g, '');
+    const normUsername = username.replace(/\s+/g, '');
+    const normDisplay = displayName.replace(/\s+/g, '');
+    const normStateDisplay = stateDisplayName.replace(/\s+/g, '');
+    
+    if (normRecord === normUsername || normRecord === normDisplay || normRecord === normStateDisplay) {
+      return true;
+    }
+
+    // Substring matches
+    if (displayName && displayName.length > 3 && cleanRecordName.includes(displayName)) return true;
+    if (stateDisplayName && stateDisplayName.length > 3 && cleanRecordName.includes(stateDisplayName)) return true;
+    
+    return false;
+  };
+
+  const myScores = scores.filter(sc => matchStudent(sc.studentName));
+  const myAbsences = absences.filter(ab => matchStudent(ab.studentName));
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 select-none" dir="rtl">
       
@@ -828,13 +862,13 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                 <div className="w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
                 <p className="text-[11px] text-sky-600 font-bold">جاري المزامنة النشطة...</p>
               </div>
-            ) : scores.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-8 rounded-2xl bg-slate-50 border border-slate-150 font-bold leading-relaxed">
-                لم تقم الإدارة التعليمية برصد أي نقط رسمية لك حتى الآن. واصل الاجتهاد!
+            ) : myScores.length === 0 ? (
+              <p className="text-xs text-slate-550 text-center py-8 rounded-2xl bg-slate-50 border border-slate-150 font-bold leading-relaxed">
+                لا توجد أي نقطة مسجلة لك حالياً في منظومة التقييم. واصل الاجتهاد!
               </p>
             ) : (
               <div className="space-y-3">
-                {scores.map((sc) => (
+                {myScores.map((sc) => (
                   <div key={sc.id} className="p-4 bg-gradient-to-br from-white to-sky-50/10 border border-sky-100 rounded-2xl flex justify-between items-center hover:bg-sky-50/20 transition-all duration-200">
                     <div className="space-y-1">
                       <div className="text-xs font-black text-slate-800">{sc.studentName}</div>
@@ -868,21 +902,21 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                 <div className="w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mx-auto" />
                 <p className="text-[11px] text-sky-600 font-bold">جاري القراءة...</p>
               </div>
-            ) : absences.length === 0 ? (
+            ) : myAbsences.length === 0 ? (
               <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 text-emerald-900 border-2 border-emerald-100/80 p-5 rounded-2xl text-xs font-bold leading-relaxed shadow-sm shadow-emerald-50/40 flex flex-col items-center text-center gap-3">
                 <div className="bg-emerald-100 p-2 rounded-full text-emerald-600">
                   <CheckCircle2 className="h-6 w-6" />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="font-extrabold text-emerald-950 text-xs">حضورك كامل وممتاز!</h4>
+                   <h4 className="font-extrabold text-emerald-950 text-xs">0 غياب - حضورك كامل وممتاز!</h4>
                   <p className="text-emerald-850 text-[11px] font-semibold leading-relaxed">
-                    تفخر المؤسسة التربوية بأنك لم تسجل أي غياب! نسبة انضباطك الدراسي تبلغ 100%. واصل هذا العطاء المتميز!
+                    تفخر المؤسسة التربوية بأن سجل غيابك فارغ تماماً! نسبة حضورك وانضباطك الدراسي تبلغ 100%. واصل هذا العطاء المتميز!
                   </p>
                 </div>
               </div>
             ) : (
               <div className="space-y-3">
-                {absences.map((ab) => (
+                {myAbsences.map((ab) => (
                   <div key={ab.id} className="p-4 bg-gradient-to-br from-white to-red-50/10 border border-red-50 rounded-2xl flex justify-between items-center hover:bg-slate-50 transition-all duration-200">
                     <div className="space-y-1">
                       <div className="text-xs font-black text-slate-800">{ab.studentName}</div>
