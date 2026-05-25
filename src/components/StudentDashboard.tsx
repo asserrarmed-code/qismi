@@ -6,6 +6,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { dbService } from '../lib/dbService';
+import { db, isFirebaseAvailable } from '../lib/firebase';
+import { onSnapshot, collection, query, where, orderBy, doc } from 'firebase/firestore';
 import { UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable } from '../types';
 import { 
   GraduationCap, 
@@ -145,64 +147,203 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
   const [frenchMathTeacher, setFrenchMathTeacher] = useState<string>('');
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
+    setIsLoading(true);
+
+    // 1. School Name Sync
+    let unsubSchool = () => {};
+    if (isFirebaseAvailable) {
       try {
-        const exData = await dbService.getExercises(currentLevel);
-        const scData = await dbService.getScores(currentLevel);
-        const abData = await dbService.getAbsences(currentLevel);
-        const docsData = await dbService.getDocuments(currentLevel);
-        let note = '';
-        try {
-          note = await dbService.getSingleStudentNote(session.uid);
-        } catch (notesErr) {
-          console.error("Error retrieving student single note:", notesErr);
-        }
-        
-        setExercises(exData || []);
-        setScores(scData || []);
-        setAbsences(abData || []);
-        setDocuments(docsData || []);
-        setTeacherNote(note || '');
+        unsubSchool = onSnapshot(doc(db, 'settings', 'school_config'), (docSnap) => {
+          if (docSnap.exists()) {
+            setSchoolName(docSnap.data().schoolName || 'مدرسة ميمونة أم المؤمنين');
+          } else {
+            setSchoolName('مدرسة ميمونة أم المؤمنين');
+          }
+        }, (err) => {
+          console.warn("School onSnapshot fallback used:", err);
+          dbService.getSchoolName().then(setSchoolName);
+        });
+      } catch (err) {
+        dbService.getSchoolName().then(setSchoolName);
+      }
+    } else {
+      dbService.getSchoolName().then(setSchoolName);
+    }
 
-        // Fetch announcements and timetables
-        let anns: Announcement[] = [];
-        let tt: Timetable | null = null;
-        try {
-          anns = await dbService.getAnnouncements(currentLevel);
-          tt = await dbService.getTimetable(currentLevel as '5' | '6');
-        } catch (annTableErr) {
-          console.error("Error loading announcements or timetable in student dashboard:", annTableErr);
-        }
-        setAnnouncements(anns || []);
-        setTimetable(tt);
+    // 2. Exercises Real-time Subscription
+    let unsubExercises = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'exercises'), where('level', '==', currentLevel), orderBy('createdAt', 'desc'));
+        unsubExercises = onSnapshot(q, (snapshot) => {
+          let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Exercise));
+          const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+          if (isHideDemo) {
+            list = list.filter(ex => !['ex1', 'ex2', 'ex3', 'ex4'].includes(ex.id) && ex.authorId !== 'system_teacher');
+          }
+          setExercises(list);
+        }, (err) => {
+          console.warn("Exercises onSnapshot fallback used:", err);
+          dbService.getExercises(currentLevel).then(setExercises);
+        });
+      } catch (err) {
+        dbService.getExercises(currentLevel).then(setExercises);
+      }
+    } else {
+      dbService.getExercises(currentLevel).then(setExercises);
+    }
 
-        // 1. Fetch school name
-        try {
-          const sName = await dbService.getSchoolName();
-          setSchoolName(sName || 'مدرسة ميمونة أم المؤمنين');
-        } catch (schoolErr) {
-          console.error("Error retrieving school name:", schoolErr);
-          setSchoolName('مدرسة ميمونة أم المؤمنين');
-        }
+    // 3. Scores Real-time Subscription
+    let unsubScores = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'scores'), where('level', '==', currentLevel), orderBy('createdAt', 'desc'));
+        unsubScores = onSnapshot(q, (snapshot) => {
+          let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Score));
+          const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+          if (isHideDemo) {
+            list = list.filter(sc => !['sc1', 'sc2', 'sc3', 'sc4'].includes(sc.id));
+          }
+          setScores(list);
+        }, (err) => {
+          console.warn("Scores onSnapshot fallback used:", err);
+          dbService.getScores(currentLevel).then(setScores);
+        });
+      } catch (err) {
+        dbService.getScores(currentLevel).then(setScores);
+      }
+    } else {
+      dbService.getScores(currentLevel).then(setScores);
+    }
 
-        // 2. Fetch student's own display name from profile
-        try {
-          const profile = await dbService.getStudentProfile(session.uid);
-          if (profile && profile.displayName) {
-            setProfileDisplayName(profile.displayName);
+    // 4. Absences Real-time Subscription
+    let unsubAbsences = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'absences'), where('level', '==', currentLevel), orderBy('createdAt', 'desc'));
+        unsubAbsences = onSnapshot(q, (snapshot) => {
+          let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Absence));
+          const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+          if (isHideDemo) {
+            list = list.filter(ab => !['ab1', 'ab2'].includes(ab.id));
+          }
+          setAbsences(list);
+        }, (err) => {
+          console.warn("Absences onSnapshot fallback used:", err);
+          dbService.getAbsences(currentLevel).then(setAbsences);
+        });
+      } catch (err) {
+        dbService.getAbsences(currentLevel).then(setAbsences);
+      }
+    } else {
+      dbService.getAbsences(currentLevel).then(setAbsences);
+    }
+
+    // 5. Educational Documents Sync
+    let unsubDocs = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'documents'), where('level', '==', currentLevel), orderBy('createdAt', 'desc'));
+        unsubDocs = onSnapshot(q, (snapshot) => {
+          let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as EduDocument));
+          const isHideDemo = localStorage.getItem('edu_hide_demo_data') === 'true';
+          if (isHideDemo) {
+            list = list.filter(docItem => !['doc1', 'doc2', 'doc3'].includes(docItem.id) && docItem.authorId !== 'system_teacher');
+          }
+          setDocuments(list);
+        }, (err) => {
+          console.warn("Documents onSnapshot fallback used:", err);
+          dbService.getDocuments(currentLevel).then(setDocuments);
+        });
+      } catch (err) {
+        dbService.getDocuments(currentLevel).then(setDocuments);
+      }
+    } else {
+      dbService.getDocuments(currentLevel).then(setDocuments);
+    }
+
+    // 6. Student Note & Display Name Sync
+    let unsubNote = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        unsubNote = onSnapshot(doc(db, 'users', session.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setTeacherNote(data.notes || '');
+            if (data.displayName) {
+              setProfileDisplayName(data.displayName);
+            }
           } else {
             setProfileDisplayName(session.displayName || '');
           }
-        } catch (profileErr) {
-          setProfileDisplayName(session.displayName || '');
-        }
+        }, (err) => {
+          console.warn("Student notes onSnapshot fallback used:", err);
+          dbService.getSingleStudentNote(session.uid).then(setTeacherNote);
+          dbService.getStudentProfile(session.uid).then(profile => {
+            if (profile && profile.displayName) {
+              setProfileDisplayName(profile.displayName);
+            }
+          });
+        });
+      } catch (err) {
+        dbService.getSingleStudentNote(session.uid).then(setTeacherNote);
+      }
+    } else {
+      dbService.getSingleStudentNote(session.uid).then(setTeacherNote);
+      setProfileDisplayName(session.displayName || '');
+    }
 
-        // 3. Automatically determine teachers of this level based on assignations
-        try {
-          const teachers = await dbService.getTeachersForStudent(currentLevel);
-          const arabicT = teachers.find(t => t.subject?.includes('العربية'));
-          const frenchMathT = teachers.find(t => 
+    // 7. Announcements Sync
+    let unsubAnns = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'announcements'), where('level', '==', currentLevel), orderBy('createdAt', 'desc'));
+        unsubAnns = onSnapshot(q, (snapshot) => {
+          const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Announcement));
+          setAnnouncements(list);
+        }, (err) => {
+          console.warn("Announcements onSnapshot fallback used:", err);
+          dbService.getAnnouncements(currentLevel).then(setAnnouncements);
+        });
+      } catch (err) {
+        dbService.getAnnouncements(currentLevel).then(setAnnouncements);
+      }
+    } else {
+      dbService.getAnnouncements(currentLevel).then(setAnnouncements);
+    }
+
+    // 8. Timetable Sync
+    let unsubTimetable = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        unsubTimetable = onSnapshot(doc(db, 'timetables', `level_${currentLevel}`), (docSnap) => {
+          if (docSnap.exists()) {
+            setTimetable(docSnap.data() as Timetable);
+          } else {
+            setTimetable(null);
+          }
+        }, (err) => {
+          console.warn("Timetable onSnapshot fallback used:", err);
+          dbService.getTimetable(currentLevel as '5' | '6').then(setTimetable);
+        });
+      } catch (err) {
+        dbService.getTimetable(currentLevel as '5' | '6').then(setTimetable);
+      }
+    } else {
+      dbService.getTimetable(currentLevel as '5' | '6').then(setTimetable);
+    }
+
+    // 9. Assign Teachers Sync for Arab & French Level
+    let unsubTeachers = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'users'), where('role', '==', 'teacher'));
+        unsubTeachers = onSnapshot(q, (snapshot) => {
+          const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          const teachersOfLevel = list.filter(t => t.assignedClasses && Array.isArray(t.assignedClasses) && t.assignedClasses.includes(currentLevel));
+
+          const arabicT = teachersOfLevel.find(t => t.subject?.includes('العربية'));
+          const frenchMathT = teachersOfLevel.find(t => 
             t.subject?.includes('الفرنسية') || 
             t.subject?.includes('الرياضيات') || 
             t.subject?.includes('الفرنسي') || 
@@ -222,20 +363,49 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
           } else {
             setFrenchMathTeacher('غير معين بعد من طرف الإدارة');
           }
-        } catch (teachersErr) {
-          console.error("Error fetching teachers for student profile card:", teachersErr);
-          setArabicTeacher('في انتظار التعيين');
-          setFrenchMathTeacher('في انتظار التعيين');
-        }
-
-      } catch (e) {
-        console.error("خطأ أثناء استرجاع بيانات الفضاء التعليمي:", e);
-      } finally {
-        setIsLoading(false);
+        }, (err) => {
+          console.warn("Teachers onSnapshot fallback used:", err);
+          dbService.getTeachersForStudent(currentLevel).then((teachers) => {
+            const arabicT = teachers.find(t => t.subject?.includes('العربية'));
+            const frenchMathT = teachers.find(t => t.subject?.includes('الفرنسية') || t.subject?.includes('الرياضيات'));
+            if (arabicT) setArabicTeacher(arabicT.displayName || arabicT.username || '');
+            if (frenchMathT) setFrenchMathTeacher(frenchMathT.displayName || frenchMathT.username || '');
+          });
+        });
+      } catch (err) {
+        dbService.getTeachersForStudent(currentLevel).then((teachers) => {
+          const arabicT = teachers.find(t => t.subject?.includes('العربية'));
+          const frenchMathT = teachers.find(t => t.subject?.includes('الفرنسية') || t.subject?.includes('الرياضيات'));
+          if (arabicT) setArabicTeacher(arabicT.displayName || arabicT.username || '');
+          if (frenchMathT) setFrenchMathTeacher(frenchMathT.displayName || frenchMathT.username || '');
+        });
       }
+    } else {
+      dbService.getTeachersForStudent(currentLevel).then((teachers) => {
+        const arabicT = teachers.find(t => t.subject?.includes('العربية'));
+        const frenchMathT = teachers.find(t => t.subject?.includes('الفرنسية') || t.subject?.includes('الرياضيات'));
+        if (arabicT) setArabicTeacher(arabicT.displayName || arabicT.username || '');
+        if (frenchMathT) setFrenchMathTeacher(frenchMathT.displayName || frenchMathT.username || '');
+      });
+    }
+
+    // Set Loading to false after initiating listeners (which fire synchronously if cached, or on first network yield)
+    const timeoutId = setTimeout(() => {
+      setIsLoading(false);
+    }, 450);
+
+    return () => {
+      unsubSchool();
+      unsubExercises();
+      unsubScores();
+      unsubAbsences();
+      unsubDocs();
+      unsubNote();
+      unsubAnns();
+      unsubTimetable();
+      unsubTeachers();
+      clearTimeout(timeoutId);
     };
-    
-    fetchData();
   }, [currentLevel, session.uid, session.displayName]);
 
   // Filters the exercises by category

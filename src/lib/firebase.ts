@@ -28,10 +28,7 @@ let storage: any = null;
 let isFirebaseAvailable = false;
 
 function deactivateFirebase() {
-  if (isFirebaseAvailable) {
-    isFirebaseAvailable = false;
-    console.warn("Firebase deactivated dynamically: App is now operating purely in Local Storage fallback mode.");
-  }
+  console.warn("deactivateFirebase called - keeping firebase active so client can reconnect dynamically.");
 }
 
 // Check if we have a valid configuration to initialize Firebase
