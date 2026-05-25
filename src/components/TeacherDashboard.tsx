@@ -1245,7 +1245,16 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       setDocSuccess('تم رفع ونشر وثيقتك التربوية بنجاح في ملفات الصف!');
       setTimeout(() => setDocSuccess(null), 5000);
     } catch (err: any) {
-      setDocError('حدث مشكل أثناء الرفع أو الحيازة: ' + err.message);
+      let msg = err.message;
+      if (typeof msg === 'string' && msg.trim().startsWith('{') && msg.trim().endsWith('}')) {
+        try {
+          const parsed = JSON.parse(msg);
+          if (parsed.error) msg = parsed.error;
+        } catch (e) {
+          // Keep original msg
+        }
+      }
+      setDocError('حدث مشكل أثناء الرفع أو الحيازة: ' + msg);
     } finally {
       setIsUploading(false);
     }

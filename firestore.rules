@@ -83,7 +83,7 @@ service cloud.firestore {
       return data.name is string && data.name.size() <= 200
         && data.level is string && (data.level == '5' || data.level == '6')
         && data.fileType is string && data.fileType.size() <= 100
-        && data.fileUrl is string && data.fileUrl.size() <= 4096
+        && data.fileUrl is string && data.fileUrl.size() <= 1000000
         && data.createdAt is string
         && data.authorId == request.auth.uid;
     }

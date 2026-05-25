@@ -1118,6 +1118,10 @@ export const dbService = {
     }
 
     // fallback: FileReader Base64 conversion
+    if (file.size > 700 * 1024) {
+      throw new Error(`تعذر الرفع لأن خدمة التخزين السحابي (Cloud Storage) غير مفعلة في مشروع Firebase الخاص بك، وبما أن الملف كبير جداً (${(file.size / (1024 * 1024)).toFixed(2)} ميغابايت)، فلا يمكن حفظه مباشرة في قاعدة البيانات. يرجى تفعيل الـ Storage في منصة Firebase لرفع ملفات أكبر، أو ضغط وتقليص الملف ليكون أقل من 700 كيلوبايت للرفع الفوري.`);
+    }
+
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async (event) => {
