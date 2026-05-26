@@ -23,7 +23,7 @@ import { db, isFirebaseAvailable, auth, storage, deactivateFirebase } from './fi
 import { initializeApp, getApps } from 'firebase/app';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, getAuth } from 'firebase/auth';
 import firebaseConfig from '../firebase-applet-config.json';
-import { UserRole, UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable } from '../types';
+import { UserRole, UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable, EduResource } from '../types';
 
 enum OperationType {
   CREATE = 'create',
@@ -1890,6 +1890,88 @@ export const dbService = {
       };
       reader.readAsDataURL(file);
     });
+  },
+
+  // 7. Resource Bank Handlers
+  getResources: async (level?: '5' | '6' | 'all'): Promise<EduResource[]> => {
+    const logPath = 'resources';
+    console.log(`[dbService] getResources for level: ${level}`);
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, logPath), orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        const firebaseResources = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as EduResource));
+        
+        // Sync to local storage
+        saveLocalItems('edu_resources', firebaseResources);
+        
+        if (level && level !== 'all') {
+          return firebaseResources.filter(res => res.level === level || res.level === 'all');
+        }
+        return firebaseResources;
+      } catch (error) {
+        console.warn("[dbService] Firestore error in getResources, falling back to local:", error);
+      }
+    }
+    
+    const local = getLocalItems<EduResource>('edu_resources');
+    const sorted = local.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (level && level !== 'all') {
+      return sorted.filter(res => res.level === level || res.level === 'all');
+    }
+    return sorted;
+  },
+
+  addResource: async (title: string, subject: string, fileUrl: string, level: '5' | '6' | 'all', authorId: string, authorName: string): Promise<EduResource> => {
+    const logPath = 'resources';
+    const newRes: Omit<EduResource, 'id'> = {
+      title: title.trim(),
+      subject: subject.trim(),
+      fileUrl: fileUrl.trim(),
+      level,
+      createdAt: new Date().toISOString(),
+      authorId,
+      authorName
+    };
+
+    console.log("[dbService] addResource payload:", newRes);
+
+    let createdRes: EduResource;
+    if (isFirebaseAvailable) {
+      try {
+        const docRef = await addDoc(collection(db, logPath), newRes);
+        createdRes = { id: docRef.id, ...newRes };
+        console.log("[dbService] Resource saved in Firestore with ID:", docRef.id);
+      } catch (error) {
+        console.error("[dbService] Error writing resource to Firestore:", error);
+        createdRes = { id: `res_${Date.now()}`, ...newRes };
+      }
+    } else {
+      createdRes = { id: `res_${Date.now()}`, ...newRes };
+    }
+
+    // Always update local storage
+    const local = getLocalItems<EduResource>('edu_resources');
+    local.unshift(createdRes);
+    saveLocalItems('edu_resources', local);
+    return createdRes;
+  },
+
+  deleteResource: async (id: string): Promise<void> => {
+    const logPath = 'resources';
+    console.log(`[dbService] deleteResource: ${id}`);
+    if (isFirebaseAvailable) {
+      try {
+        await deleteDoc(doc(db, logPath, id));
+        console.log(`[dbService] Deleted resource from Firestore: ${id}`);
+      } catch (error) {
+        console.error(`[dbService] Error deleting resource ${id} from Firestore:`, error);
+      }
+    }
+
+    const local = getLocalItems<EduResource>('edu_resources');
+    const filtered = local.filter(res => res.id !== id);
+    saveLocalItems('edu_resources', filtered);
   }
 };
 

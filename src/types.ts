@@ -76,3 +76,14 @@ export interface Timetable {
   authorId: string;
 }
 
+export interface EduResource {
+  id: string;
+  title: string;
+  subject: string;
+  fileUrl: string; // Google Drive url or external url
+  level: '5' | '6' | 'all';
+  createdAt: string; // ISO string
+  authorId: string;
+  authorName: string;
+}
+

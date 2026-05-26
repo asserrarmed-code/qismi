@@ -8,7 +8,7 @@ import { motion } from 'motion/react';
 import { dbService } from '../lib/dbService';
 import { db, isFirebaseAvailable } from '../lib/firebase';
 import { onSnapshot, collection, query, where, orderBy, doc } from 'firebase/firestore';
-import { UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable } from '../types';
+import { UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable, EduResource } from '../types';
 import { 
   GraduationCap, 
   Award, 
@@ -33,7 +33,8 @@ import {
   Save,
   X,
   Megaphone,
-  Bell
+  Bell,
+  Link2
 } from 'lucide-react';
 
 interface StudentDashboardProps {
@@ -135,6 +136,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
   // Announcements & Timetables States
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [timetable, setTimetable] = useState<Timetable | null>(null);
+  const [resources, setResources] = useState<EduResource[]>([]);
   
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<'all' | 'تمرين' | 'فرض' | 'مراقبة مستمرة'>('all');
   const [answeredQuiz, setAnsweredQuiz] = useState<{[exerciseId: string]: { selected: string; isCorrect: boolean } }>({});
@@ -389,6 +391,35 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
       });
     }
 
+    // 10. Educational Resources Sync
+    let unsubResources = () => {};
+    if (isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'resources'), orderBy('createdAt', 'desc'));
+        unsubResources = onSnapshot(q, (snapshot) => {
+          let list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as EduResource));
+          list = list.filter(res => res.level === 'all' || res.level === currentLevel);
+          setResources(list);
+        }, (err) => {
+          console.warn("Resources onSnapshot fallback used:", err);
+          dbService.getResources().then(list => {
+            const filtered = list.filter(res => res.level === 'all' || res.level === currentLevel);
+            setResources(filtered);
+          });
+        });
+      } catch (err) {
+        dbService.getResources().then(list => {
+          const filtered = list.filter(res => res.level === 'all' || res.level === currentLevel);
+          setResources(filtered);
+        });
+      }
+    } else {
+      dbService.getResources().then(list => {
+        const filtered = list.filter(res => res.level === 'all' || res.level === currentLevel);
+        setResources(filtered);
+      });
+    }
+
     // Set Loading to false after initiating listeners (which fire synchronously if cached, or on first network yield)
     const timeoutId = setTimeout(() => {
       setIsLoading(false);
@@ -404,6 +435,7 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
       unsubAnns();
       unsubTimetable();
       unsubTeachers();
+      unsubResources();
       clearTimeout(timeoutId);
     };
   }, [currentLevel, session.uid, session.displayName]);
@@ -928,6 +960,81 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
                       >
                         <FileDown className="h-3.5 w-3.5" />
                         <span>عرض وتحميل الملف</span>
+                      </a>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Section: Extra Resources Bank (Google Drive Links) */}
+          <div className="bg-white/95 border border-sky-100/85 rounded-3xl p-6 shadow-xl shadow-sky-100/20 relative">
+            <div className="absolute left-4 top-4 text-sky-400 opacity-20 hover:opacity-100 transition-opacity">
+              <Link2 className="h-10 w-10" />
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-sky-100 mb-6 relative z-10">
+              <div className="space-y-1 text-right w-full" dir="rtl">
+                <h2 className="text-base sm:text-lg font-black text-slate-850 flex items-center gap-2">
+                  <span className="p-1.5 bg-sky-100 text-sky-600 rounded-xl">
+                    <Link2 className="h-4 w-4" />
+                  </span>
+                  <span>بنك الموارد الإيجابية والإضافية (Google Drive)</span>
+                </h2>
+                <p className="text-xs text-slate-550 font-bold leading-relaxed">ملحقات، روابط داعمة ودروس مباشرة من غوغل درايف وضعها المدرس رهن إشارتك</p>
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="text-center py-10 space-y-3">
+                <div className="w-8 h-8 border-4 border-sky-450 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-sky-600 font-extrabold text-center">جاري تحديث بنك الموارد...</p>
+              </div>
+            ) : resources.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50 border border-dashed border-slate-200 rounded-[24px] p-6 text-xs text-slate-450 font-bold text-center">
+                لا تتوفر حالياً أي روابط أو موارد إضافية مسجلة في هذا القسم. سنقوم بإبلاغك بجديد الموارد فور إضافتها!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-right" dir="rtl">
+                {resources.map((res) => (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    key={res.id}
+                    className="border border-sky-100 hover:border-sky-300 rounded-2xl p-4 bg-gradient-to-br from-white to-sky-50/15 flex flex-col justify-between hover:shadow-md transition-all duration-300 gap-4"
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-slate-50 pb-1.5">
+                        <span className="px-2.5 py-1 rounded-full text-[9px] bg-emerald-50 text-emerald-700 font-black">
+                          {res.subject}
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-bold font-sans">
+                          {new Date(res.createdAt).toLocaleDateString('ar-MA')}
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <div className="p-2.5 bg-sky-50 text-sky-500 rounded-xl shrink-0">
+                          <Link2 className="h-6 w-6" />
+                        </div>
+                        <div className="space-y-1 text-right min-w-0 flex-1">
+                          <h4 className="text-xs font-black text-slate-800 line-clamp-2 leading-tight">
+                            {res.title}
+                          </h4>
+                          <p className="text-[10px] text-slate-400 font-bold">بواسطة الأستاذ: {res.authorName}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+                      <a
+                        href={res.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-gradient-to-r from-sky-400 to-sky-600 hover:from-sky-500 hover:to-sky-700 text-white rounded-xl font-black flex items-center gap-1 w-full justify-center transition-all duration-200 text-xs shadow-sm cursor-pointer"
+                      >
+                        <FileDown className="h-3.5 w-3.5" />
+                        <span>عرض المورد</span>
                       </a>
                     </div>
                   </motion.div>

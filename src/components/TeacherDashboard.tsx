@@ -7,7 +7,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 import { dbService } from '../lib/dbService';
-import { UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable } from '../types';
+import { UserSession, Exercise, Score, Absence, EduDocument, Announcement, Timetable, EduResource } from '../types';
 import { 
   GraduationCap, 
   BookOpen, 
@@ -39,7 +39,8 @@ import {
   User,
   Lock,
   Megaphone,
-  Bell
+  Bell,
+  Link2
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -126,7 +127,7 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     }
     return 'all';
   });
-  const [activeTab, setActiveTab] = useState<'exercises' | 'scores' | 'absences' | 'documents' | 'notes' | 'accounts' | 'settings' | 'announcements' | 'timetables'>('exercises');
+  const [activeTab, setActiveTab] = useState<'exercises' | 'scores' | 'absences' | 'documents' | 'notes' | 'accounts' | 'settings' | 'announcements' | 'timetables' | 'resources'>('exercises');
 
   // Announcements States
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -140,9 +141,22 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   // Timetables States
   const [timetable5, setTimetable5] = useState<Timetable | null>(null);
   const [timetable6, setTimetable6] = useState<Timetable | null>(null);
+  const [timetableUrl5, setTimetableUrl5] = useState('');
+  const [timetableUrl6, setTimetableUrl6] = useState('');
   const [timetableError, setTimetableError] = useState<string | null>(null);
   const [timetableSuccess, setTimetableSuccess] = useState<string | null>(null);
   const [isUploadingTimetable, setIsUploadingTimetable] = useState(false);
+
+  // Resources States
+  const [resources, setResources] = useState<EduResource[]>([]);
+  const [resTitle, setResTitle] = useState('');
+  const [resSubject, setResSubject] = useState('');
+  const [resFileUrl, setResFileUrl] = useState('');
+  const [resLevel, setResLevel] = useState<'5' | '6' | 'all'>('all');
+  const [resError, setResError] = useState<string | null>(null);
+  const [resSuccess, setResSuccess] = useState<string | null>(null);
+  const [isSavingRes, setIsSavingRes] = useState(false);
+  const [isDeletingResId, setIsDeletingResId] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [schoolName, setSchoolName] = useState<string>('');
@@ -779,20 +793,25 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       setAbsences(abData || []);
       setDocuments(docsData || []);
 
-      // Fetch announcements and timetables
+      // Fetch announcements and timetables and resources
       let anns: Announcement[] = [];
       let tt5: Timetable | null = null;
       let tt6: Timetable | null = null;
+      let resList: EduResource[] = [];
       try {
         anns = await dbService.getAnnouncements();
         tt5 = await dbService.getTimetable('5');
         tt6 = await dbService.getTimetable('6');
+        resList = await dbService.getResources();
       } catch (err) {
-        console.error("Error loading announcements/timetables in teacher dashboard:", err);
+        console.error("Error loading announcements/timetables/resources in teacher dashboard:", err);
       }
       setAnnouncements(anns || []);
       setTimetable5(tt5);
+      if (tt5) setTimetableUrl5(tt5.fileUrl);
       setTimetable6(tt6);
+      if (tt6) setTimetableUrl6(tt6.fileUrl);
+      setResources(resList || []);
 
       const assignedLevels = session.assignedClasses || [];
       const filteredNotes = (notesData || []).filter(note => assignedLevels.includes(note.level));
@@ -899,6 +918,91 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       setTimetableError('فشلت عملية رفع الملف: ' + (err.message || err));
     } finally {
       setIsUploadingTimetable(false);
+    }
+  };
+
+  const handleSaveTimetableUrl = async (url: string, level: '5' | '6') => {
+    setTimetableError(null);
+    setTimetableSuccess(null);
+
+    if (!url || !url.trim().startsWith('http')) {
+      setTimetableError('يرجى إدخال رابط صحيح (يجب أن يبدأ بـ http أو https).');
+      return;
+    }
+
+    setIsUploadingTimetable(true);
+    try {
+      const fileName = `رابط استعمال الزمن - المستوى ${level === '5' ? 'الخامس' : 'السادس'}`;
+      const timetableObj = await dbService.saveTimetable(level, url.trim(), fileName, session.uid);
+      if (level === '5') {
+        setTimetable5(timetableObj);
+        setTimetableUrl5(url.trim());
+      } else {
+        setTimetable6(timetableObj);
+        setTimetableUrl6(url.trim());
+      }
+      setTimetableSuccess(`تم حفظ رابط استعمال الزمن للمستوى السـ${level === '5' ? 'خامس' : 'سادس'} بنجاح.`);
+    } catch (err: any) {
+      console.error(err);
+      setTimetableError('فشلت عملية حفظ الرابط: ' + (err.message || err));
+    } finally {
+      setIsUploadingTimetable(false);
+    }
+  };
+
+  const handleAddResource = async (e: FormEvent) => {
+    e.preventDefault();
+    setResError(null);
+    setResSuccess(null);
+
+    if (!resTitle.trim()) {
+      setResError('يرجى إدخال عنوان المورد التربوي.');
+      return;
+    }
+    if (!resSubject.trim()) {
+      setResError('يرجى إدخال اسم المادة الدراسيّة.');
+      return;
+    }
+    if (!resFileUrl.trim() || !resFileUrl.trim().startsWith('http')) {
+      setResError('يرجى إدخال رابط صحيح للملف (مثل رابط Google Drive يبتدئ بـ http أو https).');
+      return;
+    }
+
+    setIsSavingRes(true);
+    try {
+      const authorName = session.displayName || session.username || 'الأستاذ';
+      const newRes = await dbService.addResource(resTitle, resSubject, resFileUrl, resLevel, session.uid, authorName);
+      setResources(prev => [newRes, ...prev]);
+      setResTitle('');
+      setResSubject('');
+      setResFileUrl('');
+      setResSuccess('تمت إضافة وحفظ المورد التربوي الجديد بنجاح في البنك!');
+      setTimeout(() => setResSuccess(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      setResError('حدث خطأ أثناء حفظ المورد في قاعدة البيانات: ' + (err.message || err));
+    } finally {
+      setIsSavingRes(false);
+    }
+  };
+
+  const handleDeleteResource = async (id: string) => {
+    if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذا المورد التربوي بشكل نهائي؟')) {
+      return;
+    }
+    setResError(null);
+    setResSuccess(null);
+    setIsDeletingResId(id);
+    try {
+      await dbService.deleteResource(id);
+      setResources(prev => prev.filter(res => res.id !== id));
+      setResSuccess('تم حذف المورد التربوي بنجاح.');
+      setTimeout(() => setResSuccess(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      setResError('خطأ أثناء عملية الحذف.');
+    } finally {
+      setIsDeletingResId(null);
     }
   };
 
@@ -1431,6 +1535,18 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
           >
             <CalendarDays className="h-4 w-4" />
             <span>تنظيم استعمال الزمن PDF</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('resources')}
+            className={`flex-1 lg:flex-initial text-center px-6 py-3.5 rounded-xl text-xs font-black transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap ${
+              activeTab === 'resources' 
+                ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-white shadow-md' 
+                : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200/50'
+            }`}
+          >
+            <Link2 className="h-4 w-4" />
+            <span>بنك الموارد الإضافية (Drive)</span>
           </button>
         </div>
 
@@ -3320,15 +3436,41 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         }}
                       />
                       <UploadCloud className="h-6 w-6 text-slate-400 mx-auto mb-2" />
-                      <p className="text-xs text-slate-550 font-bold">انقر لاختيار ملف PDF لاستعمال الزمن للمستوى الخامس</p>
+                      <p className="text-xs text-slate-550 font-bold">انقر لاختيار ملف PDF لتبويبه مباشرة</p>
                       {isUploadingTimetable && (
                         <div className="absolute inset-0 bg-white/85 flex items-center justify-center rounded-2xl font-mono">
                           <div className="flex items-center gap-2">
                             <div className="h-4 w-4 border-2 border-t-transparent border-sky-500 rounded-full animate-spin" />
-                            <span className="text-xs text-slate-700 font-black">جاري تحديث ورفع الملف...</span>
+                            <span className="text-xs text-slate-700 font-black">جاري تحديث الملف...</span>
                           </div>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-bold">أو ضع رابطاً خارجياً (Google Drive)</span>
+                    <div className="flex-grow border-t border-slate-200"></div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-slate-700">رابط استعمال الزمن المباشر:</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={timetableUrl5}
+                        onChange={(e) => setTimetableUrl5(e.target.value)}
+                        placeholder="https://drive.google.com/..."
+                        className="text-right flex-1 px-4 py-2.5 bg-white border border-slate-200 focus:border-sky-500 rounded-xl text-xs font-semibold focus:outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveTimetableUrl(timetableUrl5, '5')}
+                        className="px-4 py-2.5 bg-sky-500 hover:bg-sky-600 text-white text-xs font-black rounded-xl transition shrink-0"
+                      >
+                        حفظ الرابط
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -3388,19 +3530,217 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         }}
                       />
                       <UploadCloud className="h-6 w-6 text-slate-400 mx-auto mb-2" />
-                      <p className="text-xs text-slate-550 font-bold">انقر لاختيار ملف PDF لاستعمال الزمن للمستوى السادس</p>
+                      <p className="text-xs text-slate-550 font-bold">انقر لاختيار ملف PDF لتبويبه مباشرة</p>
                       {isUploadingTimetable && (
                         <div className="absolute inset-0 bg-white/85 flex items-center justify-center rounded-2xl font-mono">
                           <div className="flex items-center gap-2">
                             <div className="h-4 w-4 border-2 border-t-transparent border-indigo-500 rounded-full animate-spin" />
-                            <span className="text-xs text-slate-700 font-black">جاري تحديث ورفع الملف...</span>
+                            <span className="text-xs text-slate-700 font-black">جاري تحديث الملف...</span>
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
+
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-slate-200"></div>
+                    <span className="flex-shrink mx-4 text-slate-400 text-[10px] font-bold">أو ضع رابطاً خارجياً (Google Drive)</span>
+                    <div className="flex-grow border-t border-slate-200"></div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-slate-700">رابط استعمال الزمن المباشر:</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={timetableUrl6}
+                        onChange={(e) => setTimetableUrl6(e.target.value)}
+                        placeholder="https://drive.google.com/..."
+                        className="text-right flex-1 px-4 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl text-xs font-semibold focus:outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveTimetableUrl(timetableUrl6, '6')}
+                        className="px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-black rounded-xl transition shrink-0"
+                      >
+                        حفظ الرابط
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'resources' && (
+          <div className="bg-white rounded-[32px] border border-sky-100/90 shadow-xl shadow-sky-100/40 p-6 sm:p-8 space-y-8 relative z-10">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 pb-5 gap-4">
+              <div className="flex items-center gap-3">
+                <span className="p-3 bg-emerald-50 text-emerald-600 rounded-[20px] text-xl">🔗</span>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 font-sans">بنك الموارد الإضافية والروابط التعليمية (Drive)</h2>
+                  <p className="text-xs text-slate-450 font-bold">قم بإدراج روابط دروس وموارد إضافية من Google Drive لتمكين تلاميذك من معاينتها والرجوع إليها في أي وقت.</p>
+                </div>
+              </div>
+            </div>
+
+            {resError && (
+              <div className="bg-red-50 text-red-800 border-r-4 border-red-500 p-4 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                ⚠️ {resError}
+              </div>
+            )}
+
+            {resSuccess && (
+              <div className="bg-emerald-50 text-emerald-800 border-r-4 border-emerald-500 p-4 rounded-2xl text-xs font-bold leading-relaxed shadow-sm">
+                ✔️ {resSuccess}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+              {/* Form Card */}
+              <form onSubmit={handleAddResource} className="xl:col-span-4 bg-slate-50/50 border border-slate-200/50 rounded-3xl p-6 space-y-5 text-right h-fit" dir="rtl">
+                <h3 className="text-xs sm:text-sm font-black text-slate-800 border-b border-slate-200/50 pb-3 flex items-center gap-2">
+                  <span>➕ إضافة مورد تعليمي جديد</span>
+                </h3>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-700">عنوان المورد:</label>
+                  <input
+                    type="text"
+                    required
+                    value={resTitle}
+                    onChange={(e) => setResTitle(e.target.value)}
+                    placeholder="مثال: ملخص درس التراكيب - المفعول فيه"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-sky-500 focus:ring-4 focus:ring-sky-100/50 rounded-xl text-xs font-bold text-slate-850 focus:outline-none transition shadow-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-700">اسـم المادة الدراسيّة:</label>
+                  <input
+                    type="text"
+                    required
+                    value={resSubject}
+                    onChange={(e) => setResSubject(e.target.value)}
+                    placeholder="مثال: اللغة العربية، الرياضيات، النشاط العلمي..."
+                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-sky-500 focus:ring-4 focus:ring-sky-100/50 rounded-xl text-xs font-bold text-slate-850 focus:outline-none transition shadow-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-700">رابط الملف (Google Drive):</label>
+                  <input
+                    type="url"
+                    required
+                    value={resFileUrl}
+                    onChange={(e) => setResFileUrl(e.target.value)}
+                    placeholder="https://drive.google.com/..."
+                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-sky-500 focus:ring-4 focus:ring-sky-100/50 rounded-xl text-xs font-medium text-slate-850 focus:outline-none transition shadow-sm font-sans"
+                    style={{ direction: 'ltr' }}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-slate-700">المستوى الدراسي المستهدف:</label>
+                  <select
+                    value={resLevel}
+                    onChange={(e) => setResLevel(e.target.value as '5' | '6' | 'all')}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-sky-500 rounded-xl text-xs font-bold text-slate-850 focus:outline-none transition shadow-sm"
+                  >
+                    <option value="all">الجميع (المستوى الخامس والسادس)</option>
+                    {session.assignedClasses?.includes('5') && <option value="5">المستوى الخامس ابتدائي</option>}
+                    {session.assignedClasses?.includes('6') && <option value="6">المستوى السادس ابتدائي</option>}
+                  </select>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSavingRes}
+                  className="w-full py-3 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white rounded-2xl text-xs font-black transition shadow-md shadow-sky-500/15 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isSavingRes ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-t-transparent border-white rounded-full animate-spin" />
+                      <span>جاري الحفظ والجدولة...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>💾 إضافة ونشر المورد للتلاميذ</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Resources List */}
+              <div className="xl:col-span-8 space-y-4 text-right" dir="rtl">
+                <h3 className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2">
+                  <span>📂 قائمة الموارد المنشورة بالبنك</span>
+                  <span className="text-[10px] bg-slate-200 text-slate-650 px-2 py-0.5 rounded-full font-bold">
+                    {resources.length}
+                  </span>
+                </h3>
+
+                {resources.length === 0 ? (
+                  <div className="bg-slate-50/50 border border-slate-200/50 rounded-2xl p-8 text-center text-slate-400 text-xs font-bold">
+                    لا تتوفر أي موارد تربوية في بنك الموارد الإضافية حتى الآن.
+                  </div>
+                ) : (
+                  <div className="space-y-3.5 overflow-y-auto max-h-[550px] pr-1">
+                    {resources.map((res) => (
+                      <div key={res.id} className="p-5 bg-white border border-slate-100 hover:border-sky-100 shadow-sm rounded-2xl transition-all duration-200 relative group flex items-start justify-between gap-4 hover:shadow-md">
+                        <div className="flex items-start gap-4">
+                          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl shrink-0">
+                            <Link2 className="h-5 w-5" />
+                          </div>
+                          <div className="space-y-1.5 min-w-0">
+                            <h4 className="text-xs sm:text-sm font-black text-slate-800 truncate" title={res.title}>
+                              {res.title}
+                            </h4>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[10px] font-bold bg-slate-100 text-slate-650 px-2.5 py-1 rounded-full">
+                                مادة: {res.subject}
+                              </span>
+                              <span className="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full">
+                                المستهدف: {res.level === 'all' ? 'الجميع' : `المستوى ${res.level}`}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5" />
+                                {new Date(res.createdAt).toLocaleDateString('ar-MA')}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-bold">بواسطة الأستاذ: {res.authorName}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <a
+                            href={res.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-650 rounded-xl text-[11px] font-black transition flex items-center gap-1.5"
+                          >
+                            <span>فتح الرابط</span>
+                          </a>
+
+                          <button
+                            onClick={() => handleDeleteResource(res.id)}
+                            disabled={isDeletingResId === res.id}
+                            className="text-red-400 hover:text-red-650 disabled:opacity-40 p-2 rounded-xl hover:bg-red-50/50 transition cursor-pointer"
+                            title="حذف المورد"
+                          >
+                            {isDeletingResId === res.id ? (
+                              <div className="h-4 w-4 border-2 border-t-transparent border-red-500 rounded-full animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
