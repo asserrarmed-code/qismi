@@ -400,8 +400,6 @@ export const dbService = {
             } else if (userData.role === 'teacher' || userData.role === UserRole.TEACHER) {
               userRole = UserRole.TEACHER;
             } else if (userData.role === 'student' || userData.role === UserRole.STUDENT_5 || userData.role === UserRole.STUDENT_6) {
-              userRole = userData.level === '6' ? UserRole.STUDENT_5 ? UserRole.STUDENT_6 : UserRole.STUDENT_6 : UserRole.STUDENT_5; 
-              // simplify:
               userRole = userData.level === '6' ? UserRole.STUDENT_6 : UserRole.STUDENT_5;
             }
 

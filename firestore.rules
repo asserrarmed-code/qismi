@@ -26,6 +26,8 @@ service cloud.firestore {
       return isSignedIn() && (
         (userDocExists() && (getUserData().role == 'teacher' || getUserData().role == 'superadmin')) ||
         request.auth.token.email == 'teacher@edu.ma' || 
+        request.auth.token.email == 'teacher@qasmi.com' ||
+        request.auth.token.email == 'superadmin@qasmi.com' ||
         request.auth.token.email == 'asserrarmed@gmail.com'
       );
     }
@@ -33,14 +35,16 @@ service cloud.firestore {
     function isLevel5Student() {
       return isSignedIn() && (
         (userDocExists() && getUserData().role == 'student' && getUserData().level == '5') ||
-        request.auth.token.email == 'student5@edu.ma'
+        request.auth.token.email == 'student5@edu.ma' ||
+        request.auth.token.email == 'student5@qasmi.com'
       );
     }
 
     function isLevel6Student() {
       return isSignedIn() && (
         (userDocExists() && getUserData().role == 'student' && getUserData().level == '6') ||
-        request.auth.token.email == 'student6@edu.ma'
+        request.auth.token.email == 'student6@edu.ma' ||
+        request.auth.token.email == 'student6@qasmi.com'
       );
     }
 
@@ -61,7 +65,7 @@ service cloud.firestore {
       return data.text is string && data.text.size() <= 10000
         && data.level is string && (data.level == '5' || data.level == '6')
         && data.category is string && (data.category == 'تمرين' || data.category == 'فرض' || data.category == 'مراقبة مستمرة')
-        && data.authorId == request.auth.uid;
+        && (data.authorId == request.auth.uid || isTeacher());
     }
 
     // Validation for Score
@@ -88,7 +92,7 @@ service cloud.firestore {
         && data.fileType is string && data.fileType.size() <= 100
         && data.fileUrl is string && data.fileUrl.size() <= 1000000
         && data.createdAt is string
-        && data.authorId == request.auth.uid;
+        && (data.authorId == request.auth.uid || isTeacher());
     }
 
     // --- Exercises match block ---

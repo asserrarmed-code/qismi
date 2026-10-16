@@ -285,9 +285,11 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
     let unsubAnns = () => {};
     if (isFirebaseAvailable) {
       try {
-        const q = query(collection(db, 'announcements'), where('level', '==', currentLevel), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));
         unsubAnns = onSnapshot(q, (snapshot) => {
-          const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Announcement));
+          const list = snapshot.docs
+            .map(d => ({ id: d.id, ...d.data() } as Announcement))
+            .filter(ann => ann.level === 'all' || ann.level === currentLevel);
           setAnnouncements(list);
         }, (err) => {
           console.warn("Announcements onSnapshot fallback used:", err);

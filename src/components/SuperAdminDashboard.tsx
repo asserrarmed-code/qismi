@@ -75,6 +75,7 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
   const [isDeletingUser, setIsDeletingUser] = useState<string | null>(null);
+  const [userToDelete, setUserToDelete] = useState<{ uid: string; name: string } | null>(null);
 
   // Success Feedback Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -407,23 +408,27 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
     }
   };
 
-  const handleDeleteUser = async (uid: string, name: string) => {
+  const handleDeleteUser = (uid: string, name: string) => {
     if (uid === session.uid || uid === 'uid_superadmin') {
-      alert('⚠️ لا يمكنك حذف حساب المشرف الفعلي الذي تسجل به دخولك حالياً.');
+      triggerToast('⚠️ لا يمكنك حذف حساب المشرف الفعلي الذي تسجل به دخولك حالياً.');
       return;
     }
+    setUserToDelete({ uid, name });
+  };
 
-    if (confirm(`⚠️ تحذير نهائي: هل أنت متأكد من حذف الحساب الدراسي لـ (${name}) بشكل كامل ونهائي من الخادم السحابي وقاعدة البيانات؟`)) {
-      setIsDeletingUser(uid);
-      try {
-        await dbService.deleteUserAccount(uid);
-        triggerToast(`تمت إزالة الحساب الدراسي لـ (${name}) بنجاح.`);
-        fetchUsersList();
-      } catch (err: any) {
-        alert('حدث خطأ أثناء إجراء الحذف من قاعدة البيانات: ' + err.message);
-      } finally {
-        setIsDeletingUser(null);
-      }
+  const confirmDeleteUserAction = async () => {
+    if (!userToDelete) return;
+    const { uid, name } = userToDelete;
+    setIsDeletingUser(uid);
+    try {
+      await dbService.deleteUserAccount(uid);
+      triggerToast(`تمت إزالة الحساب الدراسي لـ (${name}) بنجاح.`);
+      fetchUsersList();
+    } catch (err: any) {
+      triggerToast('حدث خطأ أثناء إجراء الحذف من قاعدة البيانات: ' + (err.message || 'خطأ غير معروف'));
+    } finally {
+      setIsDeletingUser(null);
+      setUserToDelete(null);
     }
   };
 
@@ -1545,6 +1550,59 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
                   </div>
                 </div>
               )}
+            </motion.div>
+          </div>
+        )}
+
+        {/* Delete User Confirmation Modal */}
+        {userToDelete && (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-rose-100 space-y-4 text-right"
+              dir="rtl"
+            >
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="p-2.5 bg-rose-100 rounded-2xl">
+                  <Trash2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">تأكيد حذف الحساب نهائياً</h3>
+                  <p className="text-xs text-slate-500 font-bold">هذا الإجراء سيحذف الحساب من السحابة</p>
+                </div>
+              </div>
+
+              <div className="bg-rose-50/70 border border-rose-150 p-4 rounded-2xl text-xs font-bold text-rose-950 leading-relaxed">
+                هل أنت متأكد من حذف الحساب الدراسي لـ <span className="font-black text-rose-700 underline underline-offset-4">({userToDelete.name})</span> بشكل كامل ونهائي؟ لن يتمكن صاحب الحساب من تسجيل الدخول بعد هذا الإجراء.
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={!!isDeletingUser}
+                  onClick={confirmDeleteUserAction}
+                  className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md shadow-rose-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDeletingUser ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin" />
+                      <span>جاري الحذف...</span>
+                    </>
+                  ) : (
+                    <span>نعم، احذف الحساب نهائياً</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={!!isDeletingUser}
+                  onClick={() => setUserToDelete(null)}
+                  className="py-3 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer"
+                >
+                  إلغاء الأمر
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

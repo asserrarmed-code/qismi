@@ -183,6 +183,14 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   const [isCreatingAcc, setIsCreatingAcc] = useState<boolean>(false);
   const [isDeletingAccId, setIsDeletingAccId] = useState<string | null>(null);
 
+  // In-app confirmation modal state to avoid iframe window.confirm blocking
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmText?: string;
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
+
   // Transliterate simple letters and append numeric offset to guarantee a clean username
   const generateUsernameFromName = (name: string): string => {
     const clean = name.trim()
@@ -429,29 +437,32 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     }
   };
 
-  const handleDeleteStudentAccount = async (uid: string, displayName: string) => {
-    if (!window.confirm(`هل أنت متأكد من رغبتك في حذف حساب التلميذ(ة): "${displayName}" نهائياً من قاعدة البيانات والتطبيق؟`)) {
-      return;
-    }
-
-    setIsDeletingAccId(uid);
-    try {
-      await dbService.deleteStudentAccount(uid);
-      setStudentAccounts(prev => prev.filter(acc => acc.id !== uid));
-      setStudentNotes(prev => prev.filter(n => n.id !== uid));
-      setAccSuccess(`تم حذف حساب التلميذ "${displayName}" وملاحظاته بنجاح.`);
-    } catch (err) {
-      console.error("Error deleting account:", err);
-      setAccError('تعذر حذف حساب التلميذ. يرجى تكرار المحاولة لاحقاً.');
-    } finally {
-      setIsDeletingAccId(null);
-    }
+  const handleDeleteStudentAccount = (uid: string, displayName: string) => {
+    setConfirmModal({
+      title: 'حذف حساب التلميذ',
+      message: `هل أنت متأكد من رغبتك في حذف حساب التلميذ(ة): "${displayName}" نهائياً من قاعدة البيانات والتطبيق؟ لن يتمكن التلميذ من تسجيل الدخول بعد هذا الإجراء.`,
+      confirmText: 'نعم، احذف التلميذ',
+      onConfirm: async () => {
+        setIsDeletingAccId(uid);
+        try {
+          await dbService.deleteStudentAccount(uid);
+          setStudentAccounts(prev => prev.filter(acc => acc.id !== uid));
+          setStudentNotes(prev => prev.filter(n => n.id !== uid));
+          setAccSuccess(`تم حذف حساب التلميذ "${displayName}" وملاحظاته بنجاح.`);
+        } catch (err) {
+          console.error("Error deleting account:", err);
+          setAccError('تعذر حذف حساب التلميذ. يرجى تكرار المحاولة لاحقاً.');
+        } finally {
+          setIsDeletingAccId(null);
+        }
+      }
+    });
   };
 
   const handlePrintAccounts = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('الرجاء السماح بالنوافذ المنبثقة لطباعة حسابات التلاميذ.');
+      setAccError('⚠️ تعذر فتح نافذة الطباعة لأن المتصفح أو إطار العرض يحظر النوافذ المنبثقة. يرجى السماح بالنوافذ المنبثقة (Popups).');
       return;
     }
 
@@ -866,22 +877,25 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     }
   };
 
-  const handleDeleteAnnouncement = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذا الإعلان نهائياً؟')) {
-      return;
-    }
-
-    setIsDeletingAnnId(id);
-    try {
-      await dbService.deleteAnnouncement(id);
-      setAnnouncements(prev => prev.filter(ann => ann.id !== id));
-      setAnnSuccess('تم حذف الإعلان بنجاح.');
-    } catch (err: any) {
-      console.error(err);
-      setAnnError('خطأ أثناء حذف الإعلان من القواعد.');
-    } finally {
-      setIsDeletingAnnId(null);
-    }
+  const handleDeleteAnnouncement = (id: string) => {
+    setConfirmModal({
+      title: 'حذف الإعلان',
+      message: 'هل أنت متأكد من رغبتك في حذف هذا الإعلان بشكل نهائي من لوحة الإعلانات؟',
+      confirmText: 'نعم، احذف الإعلان',
+      onConfirm: async () => {
+        setIsDeletingAnnId(id);
+        try {
+          await dbService.deleteAnnouncement(id);
+          setAnnouncements(prev => prev.filter(ann => ann.id !== id));
+          setAnnSuccess('تم حذف الإعلان بنجاح.');
+        } catch (err: any) {
+          console.error(err);
+          setAnnError('خطأ أثناء حذف الإعلان من القواعد.');
+        } finally {
+          setIsDeletingAnnId(null);
+        }
+      }
+    });
   };
 
   // Timetables actions
@@ -986,24 +1000,28 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     }
   };
 
-  const handleDeleteResource = async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذا المورد التربوي بشكل نهائي؟')) {
-      return;
-    }
-    setResError(null);
-    setResSuccess(null);
-    setIsDeletingResId(id);
-    try {
-      await dbService.deleteResource(id);
-      setResources(prev => prev.filter(res => res.id !== id));
-      setResSuccess('تم حذف المورد التربوي بنجاح.');
-      setTimeout(() => setResSuccess(null), 4000);
-    } catch (err: any) {
-      console.error(err);
-      setResError('خطأ أثناء عملية الحذف.');
-    } finally {
-      setIsDeletingResId(null);
-    }
+  const handleDeleteResource = (id: string) => {
+    setConfirmModal({
+      title: 'حذف المورد التربوي',
+      message: 'هل أنت متأكد من رغبتك في حذف هذا المورد التربوي بشكل نهائي من بنك الموارد؟',
+      confirmText: 'نعم، احذف المورد',
+      onConfirm: async () => {
+        setResError(null);
+        setResSuccess(null);
+        setIsDeletingResId(id);
+        try {
+          await dbService.deleteResource(id);
+          setResources(prev => prev.filter(res => res.id !== id));
+          setResSuccess('تم حذف المورد التربوي بنجاح.');
+          setTimeout(() => setResSuccess(null), 4000);
+        } catch (err: any) {
+          console.error(err);
+          setResError('خطأ أثناء عملية الحذف.');
+        } finally {
+          setIsDeletingResId(null);
+        }
+      }
+    });
   };
 
   // Generate AI Interactive Question
@@ -1247,14 +1265,20 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   };
 
   // Delete Exercise
-  const handleDeleteExercise = async (id: string) => {
-    if (!confirm('هل تأكد رغبتك في حذف هذا التمرين بصفة نهائية؟')) return;
-    try {
-      await dbService.deleteExercise(id);
-      setExercises(prev => prev.filter(ex => ex.id !== id));
-    } catch (err: any) {
-      alert('تعذر حذف هذا السجل: ' + err.message);
-    }
+  const handleDeleteExercise = (id: string) => {
+    setConfirmModal({
+      title: 'حذف التمرين',
+      message: 'هل أنت متأكد من رغبتك في حذف هذا التمرين بشكل نهائي من منصة الفروض والأنشطة؟',
+      confirmText: 'نعم، احذف التمرين',
+      onConfirm: async () => {
+        try {
+          await dbService.deleteExercise(id);
+          setExercises(prev => prev.filter(ex => ex.id !== id));
+        } catch (err: any) {
+          setExerciseError('تعذر حذف هذا السجل: ' + (err.message || 'خطأ غير معروف'));
+        }
+      }
+    });
   };
 
   // Submit Score
@@ -1282,14 +1306,20 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   };
 
   // Delete Score
-  const handleDeleteScore = async (id: string) => {
-    if (!confirm('هل تأكد رغبتك في حذف نقطة المراقبة هذه بصفة نهائية؟')) return;
-    try {
-      await dbService.deleteScore(id);
-      setScores(prev => prev.filter(sc => sc.id !== id));
-    } catch (err: any) {
-      alert('تعذر الحذف: ' + err.message);
-    }
+  const handleDeleteScore = (id: string) => {
+    setConfirmModal({
+      title: 'حذف النقطة',
+      message: 'هل أنت متأكد من رغبتك في حذف نقطة المراقبة هذه بصفة نهائية من سجل التقييم؟',
+      confirmText: 'نعم، احذف النقطة',
+      onConfirm: async () => {
+        try {
+          await dbService.deleteScore(id);
+          setScores(prev => prev.filter(sc => sc.id !== id));
+        } catch (err: any) {
+          setScoreError('تعذر الحذف: ' + (err.message || 'خطأ غير معروف'));
+        }
+      }
+    });
   };
 
   // Submit Absence
@@ -1315,14 +1345,20 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   };
 
   // Delete Absence
-  const handleDeleteAbsence = async (id: string) => {
-    if (!confirm('هل تأكد رغبتك في حذف سجل هذا الغياب المدرسي بصفة نهائية؟')) return;
-    try {
-      await dbService.deleteAbsence(id);
-      setAbsences(prev => prev.filter(ab => ab.id !== id));
-    } catch (err: any) {
-      alert('تعذر حذف سجل الغياب: ' + err.message);
-    }
+  const handleDeleteAbsence = (id: string) => {
+    setConfirmModal({
+      title: 'حذف سجل الغياب',
+      message: 'هل أنت متأكد من رغبتك في حذف سجل هذا الغياب المدرسي بصفة نهائية؟',
+      confirmText: 'نعم، احذف السجل',
+      onConfirm: async () => {
+        try {
+          await dbService.deleteAbsence(id);
+          setAbsences(prev => prev.filter(ab => ab.id !== id));
+        } catch (err: any) {
+          setAbsenceError('تعذر حذف سجل الغياب: ' + (err.message || 'خطأ غير معروف'));
+        }
+      }
+    });
   };
 
   // Submit shared file / pedagogical document
@@ -1365,14 +1401,20 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   };
 
   // Delete Document
-  const handleDeleteDocument = async (id: string, fileUrl: string) => {
-    if (!confirm('هل تأكد رغبتك في إزالة وحذف هذا الملف التربوي بشكل مبرم؟')) return;
-    try {
-      await dbService.deleteDocument(id, fileUrl);
-      setDocuments(prev => prev.filter(d => d.id !== id));
-    } catch (err: any) {
-      alert('حدث خطأ أثناء محاولة الحذف: ' + err.message);
-    }
+  const handleDeleteDocument = (id: string, fileUrl: string) => {
+    setConfirmModal({
+      title: 'حذف الوثيقة التربوية',
+      message: 'هل أنت متأكد من رغبتك في إزالة وحذف هذا الملف التربوي بشكل مبرم من خزانة الوثائق؟',
+      confirmText: 'نعم، احذف الملف',
+      onConfirm: async () => {
+        try {
+          await dbService.deleteDocument(id, fileUrl);
+          setDocuments(prev => prev.filter(d => d.id !== id));
+        } catch (err: any) {
+          setDocError('حدث خطأ أثناء محاولة الحذف: ' + (err.message || 'خطأ غير معروف'));
+        }
+      }
+    });
   };
 
   return (
@@ -3986,6 +4028,53 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                     <span>✔️ توليد الحسابات الآن</span>
                   </>
                 )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Interactive In-App Confirmation Modal */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-rose-150 space-y-4 text-right"
+            dir="rtl"
+          >
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-2.5 bg-rose-100 rounded-2xl">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">{confirmModal.title}</h3>
+                <p className="text-xs text-slate-500 font-bold">يرجى تأكيد رغبتك للمتابعة</p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50/70 border border-rose-150 p-4 rounded-2xl text-xs font-bold text-rose-950 leading-relaxed">
+              {confirmModal.message}
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const action = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  await action();
+                }}
+                className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md shadow-rose-500/20 flex items-center justify-center gap-2"
+              >
+                <span>{confirmModal.confirmText || 'نعم، احذف نهائياً'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="py-3 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer"
+              >
+                إلغاء الأمر
               </button>
             </div>
           </motion.div>
