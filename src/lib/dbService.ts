@@ -1849,7 +1849,11 @@ export const dbService = {
     }
 
     const timetableObj: Timetable = { id: level, ...payload };
-    localStorage.setItem(`edu_timetable_${level}`, JSON.stringify(timetableObj));
+    try {
+      localStorage.setItem(`edu_timetable_${level}`, JSON.stringify(timetableObj));
+    } catch (storageErr) {
+      console.warn("[dbService] Local storage quota reached when caching timetable:", storageErr);
+    }
     return timetableObj;
   },
 
@@ -1868,7 +1872,11 @@ export const dbService = {
       }
     }
 
-    // fallback base64
+    // fallback base64 with safety limit for localStorage
+    if (file.size > 3 * 1024 * 1024) {
+      throw new Error("حجم الملف كبير جداً للتخزين المحلي (يتجاوز 3 ميغابايت). يُرجى تقليل حجم الملف أو استخدام رابط Google Drive المباشر.");
+    }
+
     console.log("[dbService] Falling back to Base64 for timetable local caching.");
     return new Promise((resolve, reject) => {
       const reader = new FileReader();

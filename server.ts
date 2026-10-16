@@ -37,7 +37,7 @@ async function startServer() {
   // API Route: Generate AI Question
   app.post("/api/generate-question", async (req, res) => {
     try {
-      const { level, component, lessonName } = req.body;
+      const { level, component, lessonName, count, language } = req.body;
 
       if (!level || !component || !lessonName) {
         return res.status(400).json({ 
@@ -45,40 +45,87 @@ async function startServer() {
         });
       }
 
+      const countNum = Math.min(Math.max(parseInt(count) || 1, 1), 25);
       const ai = getAIClient();
 
-      const levelStr = level === "5" ? "الخامس ابتدائي" : "السادس ابتدائي";
-      
-      const prompt = `أنت مفتش تربوي مغربي خبير ذو خبرة واسعة في تدريس اللغة العربية لمرحلة الابتدائي. 
-صغ سؤالاً تفاعلياً واحداً مبسطاً ومناسباً لتلاميذ الابتدائي في المغرب لدرس [${lessonName}] للمستوى [${levelStr}] في مكون [${component}]. 
-صغ السؤال بصيغة اختيار من متعدد مع تحديد الإجابة الصحيحة وخيارين خاطئين بكلمات وجيزة جداً وسهلة الاستيعاب وبلسان عربي فصيح رصين خالٍ من التعقيد، تتماشى تماماً مع المنهاج التربوي المغربي الرسمي وبدون أي رموز تعبيرية (Emojis) نهائياً في النصوص.`;
+      // Detect language
+      let isFrench = false;
+      if (language === 'fr') {
+        isFrench = true;
+      } else if (language === 'ar_vocalized') {
+        isFrench = false;
+      } else {
+        const hasLatin = /[a-zA-Z]/.test(lessonName) || /[a-zA-Z]/.test(component);
+        isFrench = hasLatin;
+      }
+
+      let prompt = "";
+      if (isFrench) {
+        const frLevelStr = level === "5" ? "5ème année du primaire" : "6ème année du primaire";
+        prompt = `En tant qu'inspecteur pédagogique marocain spécialisé dans l'enseignement de la langue française au primaire, rédigez exactement [${countNum}] questions interactives d'évaluation formative adaptées au niveau de la [${frLevelStr}] au Maroc.
+Leçon cible : [${lessonName}]
+Matière / Composante : [${component}]
+
+Directives importantes de formulation :
+1. Construisez exactement [${countNum}] questions de type QCM (Question à Choix Multiple).
+2. Pour chaque question, fournissez :
+   - Le texte de la question formulé dans un français impeccable, fluide, instructif et simple d'accès ("question").
+   - La réponse correcte directe ("correctAnswer").
+   - Deux choix incorrects mais crédibles et pertinents pour les élèves ("wrongAnswer1", "wrongAnswer2").
+3. Évitez strictement d'ajouter tout émoticône ou emoji dans les questions et réponses.
+4. Les textes doivent être rédigés de manière rigoureuse, soignée et sans aucune coquille grammaticale.`;
+      } else {
+        const arLevelStr = level === "5" ? "خامس ابتدائي" : "سادس ابتدائي";
+        prompt = `أنت مفتش تربوي مغربي خبير ذو خبرة واسعة وطويلة في تدريس اللغة العربية والرياضيات لمرحلة الابتدائي في المغرب. 
+صغ عيّنة من [${countNum}] أسئلة تفاعلية ذكية، مبسطة ومناسبة تماماً لتلاميذ الابتدائي في المغرب لدرس [${lessonName}] للمستوى [${arLevelStr}] في مكون [${component}]. 
+
+شروط متلازمة وصارمة للصياغة:
+1. ولد وصغ بالضبط [${countNum}] أسئلة تعليمية تفاعلية بصيغة اختيار من متعدد.
+2. لكل سؤال، يجب توفير:
+   - نص السؤال التربوي والتعليمي ("question").
+   - الإجابة الصحيحة الدقيقة بكلمات موجزة وملخصة ("correctAnswer").
+   - الخيار الخاطئ المقترح الأول بذكاء وموثوقية مضللة للتلميذ ("wrongAnswer1").
+   - الخيار الخاطئ المقترح الثاني بذكاء وموثوقية مضللة للتلميذ ("wrongAnswer2").
+3. لغة فصيحة وسليمة مشكلة جيداً: يجب أن تكتب جميع الأسئلة والأجوبة بلغة عربية فصيحة وسليمة 100% مع التشكيل التام للكلمات.
+4. لا تستخدم ولا تدرج أي رموز تعبيرية (Emojis) نهائياً.`;
+      }
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              question: { 
-                type: Type.STRING, 
-                description: "نص السؤال التربوي المطروح بطريقة واضحة ومبسطة" 
-              },
-              correctAnswer: { 
-                type: Type.STRING, 
-                description: "الجواب الصحيح بدقة وكلمات قليلة جداً" 
-              },
-              wrongAnswer1: { 
-                type: Type.STRING, 
-                description: "الخيار الخاطئ المقترح الأول بكلمات قليلة جداً" 
-              },
-              wrongAnswer2: { 
-                type: Type.STRING, 
-                description: "الخيار الخاطئ المقترح الثاني بكلمات قليلة جداً" 
+              questions: {
+                type: Type.ARRAY,
+                description: "قائمة الأسئلة التفاعلية المولدة",
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    question: { 
+                      type: Type.STRING, 
+                      description: "نص السؤال التربوي المطروح بطريقة واضحة ومبسطة" 
+                    },
+                    correctAnswer: { 
+                      type: Type.STRING, 
+                      description: "الجواب الصحيح بدقة وكلمات قليلة جداً" 
+                    },
+                    wrongAnswer1: { 
+                      type: Type.STRING, 
+                      description: "الخيار الخاطئ المقترح الأول بكلمات قليلة جداً" 
+                    },
+                    wrongAnswer2: { 
+                      type: Type.STRING, 
+                      description: "الخيار الخاطئ المقترح الثاني بكلمات قليلة جداً" 
+                    }
+                  },
+                  required: ["question", "correctAnswer", "wrongAnswer1", "wrongAnswer2"],
+                }
               }
             },
-            required: ["question", "correctAnswer", "wrongAnswer1", "wrongAnswer2"],
+            required: ["questions"],
           },
         },
       });
@@ -89,9 +136,18 @@ async function startServer() {
       }
 
       const parsedData = JSON.parse(responseText.trim());
+      let questionsArray = [];
+      if (parsedData.questions && Array.isArray(parsedData.questions)) {
+        questionsArray = parsedData.questions;
+      } else if (Array.isArray(parsedData)) {
+        questionsArray = parsedData;
+      } else {
+        questionsArray = [parsedData];
+      }
+
       res.json({
         success: true,
-        data: parsedData
+        data: questionsArray
       });
     } catch (error: any) {
       console.error("خطأ أثناء توليد السؤال بواسطة الذكاء الاصطناعي:", error);

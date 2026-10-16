@@ -53,12 +53,12 @@ interface ParsedQuestion {
 }
 
 function parseAiQuestion(text: string): ParsedQuestion {
-  if (!text.includes("سؤال تفاعلي ذكي") && !text.includes("🤖")) {
+  if (!text.includes("سؤال تفاعلي ذكي") && !text.includes("🤖") && !text.includes("الجواب الصحيح") && !text.includes("✔️")) {
     return { isAi: false };
   }
 
   try {
-    const lines = text.split("\n");
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
     let component = "";
     let lesson = "";
     let question = "";
@@ -67,45 +67,31 @@ function parseAiQuestion(text: string): ParsedQuestion {
     let wrong2 = "";
 
     for (const line of lines) {
-      if (line.startsWith("المكون:")) {
-        component = line.replace("المكون:", "").trim();
-      } else if (line.startsWith("الدرس:")) {
-        lesson = line.replace("الدرس:", "").trim();
-      } else if (line.startsWith("السؤال:")) {
-        question = line.replace("السؤال:", "").trim();
-      } else if (line.startsWith("✔️ الجواب الصحيح:")) {
-        correctAnswer = line.replace("✔️ الجواب الصحيح:", "").trim();
-      } else if (line.startsWith("❌ خيار خاطئ أول:")) {
-        wrong1 = line.replace("❌ خيار خاطئ أول:", "").trim();
-      } else if (line.startsWith("❌ خيار خاطئ ثان:")) {
-        wrong2 = line.replace("❌ خيار خاطئ ثان:", "").trim();
+      if (line.includes("المكون:") || line.startsWith("المكون")) {
+        component = line.replace(/.*?المكون\s*:\s*/, "").trim();
+      } else if (line.includes("الدرس:") || line.startsWith("الدرس")) {
+        lesson = line.replace(/.*?الدرس\s*:\s*/, "").trim();
+      } else if (line.includes("السؤال:") || line.startsWith("السؤال")) {
+        question = line.replace(/.*?السؤال\s*:\s*/, "").trim();
+      } else if (line.includes("الجواب الصحيح:") || line.includes("✔️") || line.includes("✅")) {
+        correctAnswer = line.replace(/.*?(?:الجواب الصحيح\s*:\s*|✔️|✅)/, "").trim();
+      } else if (line.includes("خيار خاطئ أول:") || line.includes("خيار خاطئ 1") || line.includes("الخيار الخاطئ الأول:")) {
+        wrong1 = line.replace(/.*?(?:خيار خاطئ أول\s*:\s*|خيار خاطئ 1\s*:\s*|الخيار الخاطئ الأول\s*:\s*|❌)/, "").trim();
+      } else if (line.includes("خيار خاطئ ثان:") || line.includes("خيار خاطئ 2") || line.includes("الخيار الخاطئ الثاني:")) {
+        wrong2 = line.replace(/.*?(?:خيار خاطئ ثان\s*:\s*|خيار خاطئ 2\s*:\s*|الخيار الخاطئ الثاني\s*:\s*|❌)/, "").trim();
       }
     }
+
+    // Clean any residual symbols
+    correctAnswer = correctAnswer.replace(/^[✔️✅❌\s]+/, '').trim();
+    wrong1 = wrong1.replace(/^[✔️✅❌\s]+/, '').trim();
+    wrong2 = wrong2.replace(/^[✔️✅❌\s]+/, '').trim();
 
     if (!question || !correctAnswer) {
-      // Fallback parser down the line
-      const qIndex = lines.findIndex(l => l.includes("السؤال:") || l.startsWith("السؤال:"));
-      if (qIndex !== -1) {
-        question = lines[qIndex].replace("السؤال:", "").trim();
-      }
-      
-      const correctLine = lines.find(l => l.includes("✔️") || l.includes("الجواب الصحيح"));
-      if (correctLine) {
-        correctAnswer = correctLine.replace("✔️ الجواب الصحيح:", "").replace("✔️", "").trim();
-      }
-
-      const wrong1Line = lines.find(l => l.includes("خيار خاطئ أول") || l.includes("خيار خاطئ 1"));
-      if (wrong1Line) {
-        wrong1 = wrong1Line.replace("❌ خيار خاطئ أول:", "").replace("❌", "").trim();
-      }
-
-      const wrong2Line = lines.find(l => l.includes("خيار خاطئ ثان") || l.includes("خيار خاطئ 2"));
-      if (wrong2Line) {
-        wrong2 = wrong2Line.replace("❌ خيار خاطئ ثان:", "").replace("❌", "").trim();
-      }
+      return { isAi: false };
     }
 
-    // Stable options array sorted alphabetically so they don't shift randomly during component renders
+    // Stable options array sorted so they don't shift randomly during component renders
     const rawOptions = [correctAnswer, wrong1, wrong2].filter(Boolean);
     const uniqueOptions = Array.from(new Set(rawOptions));
     const sortedOptions = [...uniqueOptions].sort((a, b) => a.localeCompare(b, 'ar'));
@@ -318,11 +304,11 @@ export default function StudentDashboard({ session, onLogout, firebaseStatus }: 
     let unsubTimetable = () => {};
     if (isFirebaseAvailable) {
       try {
-        unsubTimetable = onSnapshot(doc(db, 'timetables', `level_${currentLevel}`), (docSnap) => {
+        unsubTimetable = onSnapshot(doc(db, 'timetables', currentLevel), (docSnap) => {
           if (docSnap.exists()) {
             setTimetable(docSnap.data() as Timetable);
           } else {
-            setTimetable(null);
+            dbService.getTimetable(currentLevel as '5' | '6').then(setTimetable);
           }
         }, (err) => {
           console.warn("Timetable onSnapshot fallback used:", err);
