@@ -182,6 +182,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   const [accError, setAccError] = useState<string | null>(null);
   const [isCreatingAcc, setIsCreatingAcc] = useState<boolean>(false);
   const [isDeletingAccId, setIsDeletingAccId] = useState<string | null>(null);
+  const [selectedStudentUids, setSelectedStudentUids] = useState<string[]>([]);
+  const [isDeletingBatchStudents, setIsDeletingBatchStudents] = useState<boolean>(false);
 
   // In-app confirmation modal state to avoid iframe window.confirm blocking
   const [confirmModal, setConfirmModal] = useState<{
@@ -454,6 +456,83 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
           setAccError('تعذر حذف حساب التلميذ. يرجى تكرار المحاولة لاحقاً.');
         } finally {
           setIsDeletingAccId(null);
+        }
+      }
+    });
+  };
+
+  const handleToggleSelectStudent = (uid: string) => {
+    setSelectedStudentUids(prev => 
+      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+    );
+  };
+
+  const handleToggleSelectAllStudents = () => {
+    const visibleStudents = studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel);
+    const visibleUids = visibleStudents.map(acc => acc.id || `uid_${acc.username}`);
+    const allSelected = visibleUids.length > 0 && visibleUids.every(id => selectedStudentUids.includes(id));
+    
+    if (allSelected) {
+      setSelectedStudentUids(prev => prev.filter(id => !visibleUids.includes(id)));
+    } else {
+      setSelectedStudentUids(prev => Array.from(new Set([...prev, ...visibleUids])));
+    }
+  };
+
+  const handleDeleteSelectedStudents = () => {
+    if (selectedStudentUids.length === 0) return;
+    const count = selectedStudentUids.length;
+
+    setConfirmModal({
+      title: 'تأكيد حذف التلاميذ المحددين',
+      message: `هل أنت متأكد من رغبتك في حذف حسابات (${count}) تلاميذ تم تحديدهم نهائياً من قاعدة البيانات والتطبيق؟ لن يتمكن هؤلاء التلاميذ من تسجيل الدخول بعد هذا الإجراء.`,
+      confirmText: `نعم، احذف (${count}) تلاميذ محددين`,
+      onConfirm: async () => {
+        setIsDeletingBatchStudents(true);
+        try {
+          await dbService.deleteMultipleStudentAccounts(selectedStudentUids);
+          setStudentAccounts(prev => prev.filter(acc => !selectedStudentUids.includes(acc.id || `uid_${acc.username}`)));
+          setStudentNotes(prev => prev.filter(n => !selectedStudentUids.includes(n.id)));
+          const deletedCount = selectedStudentUids.length;
+          setSelectedStudentUids([]);
+          setAccSuccess(`🎉 تم بنجاح حذف (${deletedCount}) من حسابات التلاميذ المحددين.`);
+        } catch (err: any) {
+          console.error("Error batch deleting students:", err);
+          setAccError('تعذر حذف بعض حسابات التلاميذ. يرجى تكرار المحاولة لاحقاً.');
+        } finally {
+          setIsDeletingBatchStudents(false);
+        }
+      }
+    });
+  };
+
+  const handleDeleteAllStudents = () => {
+    const targetStudents = studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel);
+    if (targetStudents.length === 0) {
+      setAccError('لا يوجد أي تلاميذ مسجلين للحذف في هذا المستوى.');
+      return;
+    }
+    const count = targetStudents.length;
+    const targetUids = targetStudents.map(acc => acc.id || `uid_${acc.username}`);
+    const levelLabel = viewLevel === 'all' ? 'جميع المستويات' : `المستوى ${viewLevel === '5' ? 'الخامس' : 'السادس'}`;
+
+    setConfirmModal({
+      title: '⚠️ تحذير فائق: حذف كافة حسابات التلاميذ دفعة واحدة',
+      message: `هل أنت متأكد تماماً من رغبتك في مسح وحذف جميع حسابات التلاميذ (${count} تلميذ - ${levelLabel}) دفعة واحدة ونهائياً؟ سيتم تصفية وإلغاء بطاقات الدخول بالكامل ولا يمكن التراجع عن هذه العملية!`,
+      confirmText: `نعم، احذف كافة التلاميذ (${count}) الآن`,
+      onConfirm: async () => {
+        setIsDeletingBatchStudents(true);
+        try {
+          await dbService.deleteMultipleStudentAccounts(targetUids);
+          setStudentAccounts(prev => prev.filter(acc => !targetUids.includes(acc.id || `uid_${acc.username}`)));
+          setStudentNotes(prev => prev.filter(n => !targetUids.includes(n.id)));
+          setSelectedStudentUids(prev => prev.filter(id => !targetUids.includes(id)));
+          setAccSuccess(`🎉 تم بنجاح مسح وحذف كافة حسابات التلاميذ (${count} تلميذ) دفعة واحدة.`);
+        } catch (err: any) {
+          console.error("Error deleting all students:", err);
+          setAccError('تعذر حذف كافة الحسابات دفعة واحدة. يرجى تكرار المحاولة لاحقاً.');
+        } finally {
+          setIsDeletingBatchStudents(false);
         }
       }
     });
@@ -3022,21 +3101,96 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 {/* Left Side: Interactive Directory Table */}
                 <div className="xl:col-span-8 space-y-4">
                   
-                  {/* Filter / Search Info and Stats bar */}
-                  <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                      <span>📂</span>
-                      <span>سجل إدارة المصادقة والحسابات المقيدة للطلبة المعتمدين والمحدثين:</span>
-                    </span>
-                    
-                    <button
-                      onClick={loadAllData}
-                      title="تحديث البيانات"
-                      className="text-xs p-2 bg-white rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition font-black cursor-pointer shadow-sm flex items-center gap-1.5"
-                    >
-                      <span>🔄</span>
-                      <span>تحديث اللائحة</span>
-                    </button>
+                  {/* Filter / Search Info and Stats bar with Batch Actions */}
+                  <div className="bg-slate-50/70 rounded-2xl p-4 border border-slate-200/80 flex flex-col gap-3">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                          <span>📂</span>
+                          <span>سجل حسابات ولوج الطلبة:</span>
+                        </span>
+                        <span className="text-[10px] bg-sky-100 text-sky-800 font-extrabold px-2.5 py-0.5 rounded-full">
+                          {studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel).length} تلميذ مدرج
+                        </span>
+                        {selectedStudentUids.length > 0 && (
+                          <span className="text-[10px] bg-rose-100 text-rose-700 font-black px-2.5 py-0.5 rounded-full animate-pulse">
+                            تم تحديد {selectedStudentUids.length} تلميذ
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
+                        <button
+                          type="button"
+                          onClick={loadAllData}
+                          title="تحديث البيانات"
+                          className="text-xs p-2 px-3 bg-white rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition font-black cursor-pointer shadow-sm flex items-center gap-1.5"
+                        >
+                          <span>🔄</span>
+                          <span>تحديث</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Batch Deletion Toolbar */}
+                    <div className="pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={handleToggleSelectAllStudents}
+                          className="text-[11px] font-black px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition cursor-pointer flex items-center gap-1.5 select-none"
+                        >
+                          <span>☑️</span>
+                          <span>
+                            {studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel).length > 0 &&
+                            studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel).every(s => selectedStudentUids.includes(s.id || `uid_${s.username}`))
+                              ? 'إلغاء تحديد الكل'
+                              : 'تحديد جميع التلاميذ'}
+                          </span>
+                        </button>
+
+                        {selectedStudentUids.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStudentUids([])}
+                            className="text-[11px] font-bold px-2.5 py-1.5 text-slate-500 hover:text-slate-700 transition cursor-pointer"
+                          >
+                            إلغاء ({selectedStudentUids.length})
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        {/* Delete Selected Button */}
+                        {selectedStudentUids.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleDeleteSelectedStudents}
+                            disabled={isDeletingBatchStudents}
+                            className="text-[11px] font-black px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white transition cursor-pointer flex items-center gap-1.5 shadow-sm shadow-rose-200 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>
+                              {isDeletingBatchStudents 
+                                ? 'جاري الحذف...' 
+                                : `حذف التلاميذ المحددين (${selectedStudentUids.length})`}
+                            </span>
+                          </button>
+                        )}
+
+                        {/* Delete All Button */}
+                        <button
+                          type="button"
+                          onClick={handleDeleteAllStudents}
+                          disabled={isDeletingBatchStudents || studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel).length === 0}
+                          className="text-[11px] font-black px-3.5 py-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                          title="حذف جميع حسابات التلاميذ الظاهرين دفعة واحدة"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          <span>حذف كافة التلاميذ دفعة واحدة ⚠️</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {isLoading ? (
@@ -3050,8 +3204,20 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                       <div className="overflow-x-auto">
                         <table className="w-full text-right border-collapse">
                           <thead>
-                            <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                              <th className="py-3 px-4 font-black">#</th>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                              <th className="py-3 px-3 text-center w-12">
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel).length > 0 &&
+                                    studentAccounts.filter(acc => viewLevel === 'all' || acc.level === viewLevel).every(s => selectedStudentUids.includes(s.id || `uid_${s.username}`))
+                                  }
+                                  onChange={handleToggleSelectAllStudents}
+                                  className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer accent-sky-500"
+                                  title="تحديد الكل"
+                                />
+                              </th>
+                              <th className="py-3 px-3 font-black">#</th>
                               <th className="py-3 px-4 font-black">اسم التلميذ(ة)</th>
                               <th className="py-3 px-4 font-black">المستوى الدراسي</th>
                               <th className="py-3 px-4 font-black">اسم المستخدم للولوج</th>
@@ -3062,35 +3228,54 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                           <tbody className="divide-y divide-slate-50 text-xs text-slate-700">
                             {studentAccounts
                               .filter(acc => viewLevel === 'all' || acc.level === viewLevel)
-                              .map((acc, index) => (
-                                <tr key={acc.id || acc.username} className="hover:bg-slate-50/40 transition">
-                                  <td className="py-3 px-4 text-slate-400 font-bold">{index + 1}</td>
-                                  <td className="py-3 px-4 font-extrabold text-slate-900">{acc.displayName}</td>
-                                  <td className="py-3 px-4">
-                                    <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black ${
-                                      acc.level === '6' 
-                                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' 
-                                        : 'bg-blue-50 text-blue-700 border border-blue-105'
-                                    }`}>
-                                      المستوى {acc.level === '6' ? 'السادس' : 'الخامس'}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-4 font-mono font-bold text-slate-600">@{acc.username}</td>
-                                  <td className="py-3 px-4 font-mono font-bold text-amber-700 bg-amber-50/30">
-                                    {acc.password || `primary${acc.level}`}
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteStudentAccount(acc.id || `uid_${acc.username}`, acc.displayName)}
-                                      disabled={isDeletingAccId === acc.id}
-                                      className="p-1 px-2.5 bg-red-50 hover:bg-red-100 text-red-650 hover:text-red-750 font-black rounded-lg text-[10px] transition cursor-pointer"
-                                    >
-                                      {isDeletingAccId === acc.id ? 'جاري الحذف...' : 'حذف 🗑️'}
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                              .map((acc, index) => {
+                                const uid = acc.id || `uid_${acc.username}`;
+                                const isSelected = selectedStudentUids.includes(uid);
+                                return (
+                                  <tr 
+                                    key={uid} 
+                                    className={`transition ${isSelected ? 'bg-sky-50/80 border-r-4 border-r-sky-500' : 'hover:bg-slate-50/40'}`}
+                                  >
+                                    <td className="py-3 px-3 text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => handleToggleSelectStudent(uid)}
+                                        className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer accent-sky-500"
+                                      />
+                                    </td>
+                                    <td className="py-3 px-3 text-slate-400 font-bold">{index + 1}</td>
+                                    <td className="py-3 px-4 font-extrabold text-slate-900">
+                                      <span className="cursor-pointer" onClick={() => handleToggleSelectStudent(uid)}>
+                                        {acc.displayName}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4">
+                                      <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black ${
+                                        acc.level === '6' 
+                                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' 
+                                          : 'bg-blue-50 text-blue-700 border border-blue-105'
+                                      }`}>
+                                        المستوى {acc.level === '6' ? 'السادس' : 'الخامس'}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 font-mono font-bold text-slate-600">@{acc.username}</td>
+                                    <td className="py-3 px-4 font-mono font-bold text-amber-700 bg-amber-50/30">
+                                      {acc.password || `primary${acc.level}`}
+                                    </td>
+                                    <td className="py-3 px-4 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteStudentAccount(uid, acc.displayName)}
+                                        disabled={isDeletingAccId === acc.id || isDeletingBatchStudents}
+                                        className="p-1 px-2.5 bg-red-50 hover:bg-red-100 text-red-650 hover:text-red-750 font-black rounded-lg text-[10px] transition cursor-pointer disabled:opacity-40"
+                                      >
+                                        {isDeletingAccId === acc.id ? 'جاري الحذف...' : 'حذف 🗑️'}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                           </tbody>
                         </table>
                       </div>

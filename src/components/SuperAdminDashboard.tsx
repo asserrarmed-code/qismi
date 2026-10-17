@@ -77,6 +77,17 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
   const [isDeletingUser, setIsDeletingUser] = useState<string | null>(null);
   const [userToDelete, setUserToDelete] = useState<{ uid: string; name: string } | null>(null);
 
+  // Multi-select & Batch Deletion for Students
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [isBulkDeletingStudents, setIsBulkDeletingStudents] = useState<boolean>(false);
+  const [bulkDeleteModal, setBulkDeleteModal] = useState<{
+    isOpen: boolean;
+    count: number;
+    uids: string[];
+    title: string;
+    message: string;
+  } | null>(null);
+
   // Success Feedback Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -432,6 +443,91 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
     }
   };
 
+  const isStudentUser = (u: any) => {
+    const rawRole = (u.role || '').toLowerCase();
+    return (
+      rawRole === 'student' ||
+      u.role === UserRole.STUDENT_5 ||
+      u.role === UserRole.STUDENT_6 ||
+      (!rawRole && u.username !== 'superadmin' && u.username !== 'teacher')
+    );
+  };
+
+  const handleToggleSelectStudent = (uid: string) => {
+    setSelectedStudentIds(prev => 
+      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+    );
+  };
+
+  const handleToggleSelectAllVisibleStudents = () => {
+    const visibleStudents = filteredUsers.filter(isStudentUser);
+    const visibleUids = visibleStudents.map(u => u.id || u.uid || `uid_${u.username}`);
+    const allSelected = visibleUids.length > 0 && visibleUids.every(id => selectedStudentIds.includes(id));
+    
+    if (allSelected) {
+      setSelectedStudentIds(prev => prev.filter(id => !visibleUids.includes(id)));
+    } else {
+      setSelectedStudentIds(prev => Array.from(new Set([...prev, ...visibleUids])));
+    }
+  };
+
+  const handleOpenDeleteSelectedModal = () => {
+    if (selectedStudentIds.length === 0) return;
+    const count = selectedStudentIds.length;
+    setBulkDeleteModal({
+      isOpen: true,
+      count,
+      uids: [...selectedStudentIds],
+      title: `تأكيد حذف (${count}) من التلاميذ المحددين`,
+      message: `هل أنت متأكد من رغبتك في حذف حسابات (${count}) تلاميذ محددين نهائياً من النظام وقاعدة البيانات؟ لن يتمكن هؤلاء التلاميذ من الولوج بعد الحذف.`
+    });
+  };
+
+  const handleOpenDeleteAllStudentsModal = (level?: '5' | '6' | 'all') => {
+    let targetStudents = users.filter(isStudentUser);
+    let levelLabel = 'جميع المستويات';
+
+    if (level === '5' || selectedRoleFilter === 'student_5') {
+      targetStudents = targetStudents.filter(u => u.level === '5');
+      levelLabel = 'المستوى الخامس';
+    } else if (level === '6' || selectedRoleFilter === 'student_6') {
+      targetStudents = targetStudents.filter(u => u.level === '6');
+      levelLabel = 'المستوى السادس';
+    }
+
+    if (targetStudents.length === 0) {
+      triggerToast('⚠️ لا يوجد أي حسابات تلاميذ مسجلين للحذف.');
+      return;
+    }
+
+    const count = targetStudents.length;
+    const targetUids = targetStudents.map(u => u.id || u.uid || `uid_${u.username}`);
+
+    setBulkDeleteModal({
+      isOpen: true,
+      count,
+      uids: targetUids,
+      title: `⚠️ تحذير فائق: حذف كافة حسابات التلاميذ دفعة واحدة (${count})`,
+      message: `أنت على وشك حذف كافة حسابات التلاميذ (${count} تلميذ - ${levelLabel}) دفعة واحدة بشكل كامل ونهائي من قاعدة البيانات! لن يتم المساس بحسابات المشرفين أو الأساتذة. هل أنت متأكد تماماً من هذا القرار؟`
+    });
+  };
+
+  const confirmBulkDeleteAction = async () => {
+    if (!bulkDeleteModal) return;
+    const { count, uids } = bulkDeleteModal;
+    setIsBulkDeletingStudents(true);
+    try {
+      await dbService.deleteMultipleStudentAccounts(uids);
+      setSelectedStudentIds(prev => prev.filter(id => !uids.includes(id)));
+      triggerToast(`🎉 تم بنجاح مسح وحذف (${count}) من حسابات التلاميذ دفعة واحدة.`);
+      setBulkDeleteModal(null);
+    } catch (err: any) {
+      triggerToast('حدث خطأ أثناء إجراء الحذف الجماعي: ' + (err.message || 'خطأ غير معروف'));
+    } finally {
+      setIsBulkDeletingStudents(false);
+    }
+  };
+
   // Stats Counters
   const totalAdmins = users.filter(u => u.role === 'superadmin' || u.role === UserRole.SUPERADMIN).length;
   const totalTeachers = users.filter(u => u.role === 'teacher' || u.role === UserRole.TEACHER).length;
@@ -666,12 +762,82 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
       {/* Main Users Registry List Grid */}
       <div className="bg-white border border-sky-100 rounded-3xl shadow-xl shadow-sky-100/10 overflow-hidden">
         
-        <div className="bg-slate-50 p-4 border-b border-sky-50 flex items-center justify-between">
-          <h2 className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-1.5">
-            <Users className="h-4.5 w-4.5 text-sky-500" />
-            <span>سجل الحسابات والولوجيات الفعال ({filteredUsers.length} مستخدم مدرج)</span>
-          </h2>
-          <span className="text-[10px] font-sans font-extrabold text-slate-400">انقر على الخيارات لإدارة الحسابات</span>
+        <div className="bg-slate-50 p-4 border-b border-sky-50 space-y-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <h2 className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-1.5">
+              <Users className="h-4.5 w-4.5 text-sky-500" />
+              <span>سجل الحسابات والولوجيات الفعال ({filteredUsers.length} مستخدم مدرج)</span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-sans font-extrabold text-slate-400">انقر على الخيارات لإدارة الحسابات</span>
+            </div>
+          </div>
+
+          {/* Student Batch Management Toolbar */}
+          <div className="pt-2 border-t border-slate-200/70 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleToggleSelectAllVisibleStudents}
+                disabled={filteredUsers.filter(isStudentUser).length === 0}
+                className="text-[11px] font-black px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-40 select-none"
+              >
+                <span>☑️</span>
+                <span>
+                  {filteredUsers.filter(isStudentUser).length > 0 &&
+                  filteredUsers.filter(isStudentUser).every(s => selectedStudentIds.includes(s.id || s.uid || `uid_${s.username}`))
+                    ? 'إلغاء تحديد كل التلاميذ'
+                    : 'تحديد جميع تلاميذ اللائحة'}
+                </span>
+              </button>
+
+              {selectedStudentIds.length > 0 && (
+                <>
+                  <span className="text-[10px] bg-rose-100 text-rose-700 font-black px-2.5 py-1 rounded-full animate-pulse">
+                    تم تحديد {selectedStudentIds.length} تلميذ
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStudentIds([])}
+                    className="text-[11px] font-bold px-2 py-1 text-slate-500 hover:text-slate-700 transition cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap w-full md:w-auto justify-end">
+              {/* Delete Selected Students */}
+              {selectedStudentIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleOpenDeleteSelectedModal}
+                  disabled={isBulkDeletingStudents}
+                  className="text-[11px] font-black px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-rose-200 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>
+                    {isBulkDeletingStudents 
+                      ? 'جاري الحذف...' 
+                      : `حذف التلاميذ المحددين (${selectedStudentIds.length})`}
+                  </span>
+                </button>
+              )}
+
+              {/* Delete All Students */}
+              <button
+                type="button"
+                onClick={() => handleOpenDeleteAllStudentsModal()}
+                disabled={isBulkDeletingStudents || totalStudents === 0}
+                className="text-[11px] font-black px-3.5 py-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 active:scale-95 text-red-700 transition cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                title="حذف جميع حسابات التلاميذ دفعة واحدة مع الإبقاء على حسابات المشرفين والأساتذة"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                <span>حذف كافة التلاميذ ({totalStudents}) دفعة واحدة ⚠️</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {loading ? (
@@ -696,6 +862,18 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
             <table className="w-full text-right border-collapse">
               <thead>
                 <tr className="bg-slate-50/50 border-b border-sky-50 text-[11px] font-black text-slate-600">
+                  <th className="py-4.5 px-4 text-center w-12">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredUsers.filter(isStudentUser).length > 0 &&
+                        filteredUsers.filter(isStudentUser).every(s => selectedStudentIds.includes(s.id || s.uid || `uid_${s.username}`))
+                      }
+                      onChange={handleToggleSelectAllVisibleStudents}
+                      className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer accent-sky-500"
+                      title="تحديد جميع التلاميذ في اللائحة"
+                    />
+                  </th>
                   <th className="py-4.5 px-6">المستفيد والاسم الكامل</th>
                   <th className="py-4.5 px-6">اسم مستخدم الحساب</th>
                   <th className="py-4.5 px-6">التبعية والمستوى التعليمي</th>
@@ -708,10 +886,30 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
                   const rawRole = (u.role || '').toLowerCase();
                   const isSA = rawRole === 'superadmin' || u.role === UserRole.SUPERADMIN;
                   const isTeach = rawRole === 'teacher' || u.role === UserRole.TEACHER;
-                  const isStud = rawRole === 'student' || u.role === UserRole.STUDENT_5 || u.role === UserRole.STUDENT_6;
+                  const isStud = isStudentUser(u);
+                  const uid = u.id || u.uid || `uid_${u.username}`;
+                  const isSelected = isStud && selectedStudentIds.includes(uid);
                   
                   return (
-                    <tr key={u.id || u.username} className="hover:bg-slate-50/40 transition">
+                    <tr 
+                      key={uid} 
+                      className={`transition ${isSelected ? 'bg-sky-50/70 border-r-4 border-r-sky-500' : 'hover:bg-slate-50/40'}`}
+                    >
+                      {/* Selection Checkbox */}
+                      <td className="py-4.5 px-4 text-center">
+                        {isStud ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectStudent(uid)}
+                            className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-400 cursor-pointer accent-sky-500"
+                          />
+                        ) : (
+                          <span title="حساب محمي من الحذف الجماعي" className="text-slate-300 text-xs select-none">
+                            🔒
+                          </span>
+                        )}
+                      </td>
                       
                       {/* Full Name & Role Badge */}
                       <td className="py-4.5 px-6">
@@ -1601,6 +1799,63 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
                   className="py-3 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer"
                 >
                   إلغاء الأمر
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Bulk Delete Students Confirmation Modal */}
+        {bulkDeleteModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-rose-150 space-y-5 text-right"
+              dir="rtl"
+            >
+              <div className="flex items-center gap-3 text-rose-600">
+                <div className="p-3 bg-rose-100 rounded-2xl">
+                  <Trash2 className="h-6 w-6 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">{bulkDeleteModal.title}</h3>
+                  <p className="text-xs text-rose-600 font-bold">عملية حذف جماعي لحسابات التلاميذ</p>
+                </div>
+              </div>
+
+              <div className="bg-rose-50/80 border border-rose-200 p-4 rounded-2xl text-xs font-bold text-rose-950 leading-relaxed space-y-2">
+                <p>{bulkDeleteModal.message}</p>
+                <div className="flex items-center gap-2 pt-1 text-[11px] font-black text-rose-700">
+                  <span>⚠️ تنبيه:</span>
+                  <span>العدد الإجمالي للحسابات التي سيتم حذفها: ({bulkDeleteModal.count}) حساب تلميذ. لن تتأثر حسابات المشرفين والأساتذة.</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isBulkDeletingStudents}
+                  onClick={confirmBulkDeleteAction}
+                  className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md shadow-rose-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isBulkDeletingStudents ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin" />
+                      <span>جاري حذف الحسابات ({bulkDeleteModal.count})...</span>
+                    </>
+                  ) : (
+                    <span>تأكيد الحذف النهائي لـ ({bulkDeleteModal.count}) تلميذ 🗑️</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={isBulkDeletingStudents}
+                  onClick={() => setBulkDeleteModal(null)}
+                  className="py-3 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer"
+                >
+                  إلغاء الأمر والتراجع
                 </button>
               </div>
             </motion.div>

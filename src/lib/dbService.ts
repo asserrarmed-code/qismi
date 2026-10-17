@@ -16,7 +16,8 @@ import {
   getDocsFromServer,
   setDoc,
   getDoc,
-  onSnapshot
+  onSnapshot,
+  writeBatch
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, isFirebaseAvailable, auth, storage, deactivateFirebase } from './firebase';
@@ -1432,6 +1433,104 @@ export const dbService = {
     const localNotes = getLocalItems<any>('edu_student_notes');
     const updatedNotes = localNotes.filter((n: any) => n.id !== uid);
     saveLocalItems('edu_student_notes', updatedNotes);
+  },
+
+  deleteMultipleStudentAccounts: async (uids: string[]): Promise<number> => {
+    if (!uids || uids.length === 0) return 0;
+    const uidSet = new Set(uids);
+    let count = 0;
+
+    if (isFirebaseAvailable) {
+      try {
+        // Chunk by 400 for Firestore batch limits (max is 500)
+        for (let i = 0; i < uids.length; i += 400) {
+          const chunk = uids.slice(i, i + 400);
+          const batch = writeBatch(db);
+          for (const uid of chunk) {
+            batch.delete(doc(db, 'users', uid));
+          }
+          await batch.commit();
+          count += chunk.length;
+        }
+      } catch (error) {
+        console.error("[dbService] Batch delete in Firestore failed, using individual fallback:", error);
+        for (const uid of uids) {
+          try {
+            await deleteDoc(doc(db, 'users', uid));
+            count++;
+          } catch (e) {
+            console.error(`Error deleting student ${uid}:`, e);
+          }
+        }
+      }
+    }
+
+    // Keep local storage caches in sync
+    const localAccounts = getLocalItems<any>('edu_student_accounts');
+    const updatedAccounts = localAccounts.filter((acc: any) => !uidSet.has(acc.id) && !uidSet.has(acc.uid) && !uidSet.has(`uid_${acc.username}`));
+    saveLocalItems('edu_student_accounts', updatedAccounts);
+
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const updatedUsers = localUsers.filter((u: any) => !uidSet.has(u.id) && !uidSet.has(u.uid) && !uidSet.has(`uid_${u.username}`));
+    saveLocalItems('edu_users_all', updatedUsers);
+
+    const localNotes = getLocalItems<any>('edu_student_notes');
+    const updatedNotes = localNotes.filter((n: any) => !uidSet.has(n.id) && !uidSet.has(n.uid));
+    saveLocalItems('edu_student_notes', updatedNotes);
+
+    if (!isFirebaseAvailable) {
+      count = uids.length;
+    }
+
+    return count;
+  },
+
+  deleteAllStudents: async (level?: '5' | '6' | 'all'): Promise<number> => {
+    const studentUidsToDelete = new Set<string>();
+
+    if (isFirebaseAvailable) {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        snapshot.docs.forEach(docSnap => {
+          const data = docSnap.data();
+          const role = (data.role || '').toLowerCase();
+          const isStudent = role === 'student' || (!role && data.username !== 'superadmin' && data.username !== 'teacher');
+          if (isStudent && data.username !== 'superadmin' && data.username !== 'teacher') {
+            if (!level || level === 'all' || data.level === level) {
+              studentUidsToDelete.add(docSnap.id);
+            }
+          }
+        });
+      } catch (err) {
+        console.error("[dbService] Error scanning users collection for deleteAllStudents:", err);
+      }
+    }
+
+    // Also collect from local caches
+    const localUsers = getLocalItems<any>('edu_users_all');
+    localUsers.forEach(u => {
+      const role = (u.role || '').toLowerCase();
+      const isStudent = role === 'student' || (!role && u.username !== 'superadmin' && u.username !== 'teacher');
+      if (isStudent && u.username !== 'superadmin' && u.username !== 'teacher') {
+        if (!level || level === 'all' || u.level === level) {
+          const id = u.id || u.uid || `uid_${u.username}`;
+          studentUidsToDelete.add(id);
+        }
+      }
+    });
+
+    const localAccounts = getLocalItems<any>('edu_student_accounts');
+    localAccounts.forEach(acc => {
+      if (!level || level === 'all' || acc.level === level) {
+        const id = acc.id || acc.uid || `uid_${acc.username}`;
+        studentUidsToDelete.add(id);
+      }
+    });
+
+    const uidsArray = Array.from(studentUidsToDelete);
+    if (uidsArray.length === 0) return 0;
+
+    return await dbService.deleteMultipleStudentAccounts(uidsArray);
   },
 
   subscribeAllUsers: (onUpdate: (users: any[]) => void) => {
