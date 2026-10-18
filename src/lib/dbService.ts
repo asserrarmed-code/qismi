@@ -604,7 +604,7 @@ export const dbService = {
     }));
   },
 
-  // Super Admin API: Save or modify user details (Create teacher, student, admin, or modify password)
+  // Super Admin / Teacher API: Save or modify user details (Create teacher, student, admin, or modify user in place)
   saveUserAccount: async (user: { 
     id?: string; 
     username: string; 
@@ -614,81 +614,175 @@ export const dbService = {
     password: string;
     subject?: string;
     assignedClasses?: string[];
+    originalUsername?: string;
+    originalDisplayName?: string;
   }): Promise<void> => {
     console.log("[dbService] saveUserAccount triggered for user:", user);
-    let uid = user.id || `uid_${user.username.trim().toLowerCase()}`;
+    const cleanUsername = user.username.trim().toLowerCase();
+    const cleanDisplayName = user.displayName.trim();
+    const cleanPassword = user.password.trim();
+    const originalDocId = user.id;
+    const originalUsername = user.originalUsername ? user.originalUsername.trim().toLowerCase() : undefined;
+
+    let uid = originalDocId || `uid_${cleanUsername}`;
     
+    // Check if this username already belongs to an existing user in Firestore if no id was provided
+    if (!originalDocId && isFirebaseAvailable) {
+      try {
+        const q = query(collection(db, 'users'), where('username', '==', cleanUsername));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          uid = snap.docs[0].id;
+          console.log(`[dbService] Reusing existing Firestore doc ID: ${uid} for username: ${cleanUsername}`);
+        }
+      } catch (checkErr) {
+        console.warn("Could not check existing username in Firestore:", checkErr);
+      }
+    }
+
     if (isFirebaseAvailable) {
       try {
-        console.log(`[dbService] Dual-write active: creating Authentication account for: ${user.username}`);
-        const authUid = await createAuthUserSafely(user.username, user.password);
-        if (authUid) {
-          console.log(`[dbService] Auth account created successfully with UID: ${authUid}. Overriding destination ID.`);
+        console.log(`[dbService] Dual-write active: creating/updating Authentication account for: ${cleanUsername}`);
+        const authUid = await createAuthUserSafely(cleanUsername, cleanPassword);
+        // Only override destination ID with authUid if this was a brand new account without an existing ID
+        if (authUid && !originalDocId) {
           uid = authUid;
         }
       } catch (authErr) {
-        console.error("[dbService] Firebase Auth dual-write creation failed, falling back to custom state:", authErr);
+        console.error("[dbService] Firebase Auth dual-write creation failed, continuing with document write:", authErr);
+      }
+    }
+
+    // Preserve existing notes and createdAt if updating
+    let existingNotes = '';
+    let existingCreatedAt = new Date().toISOString();
+    if (isFirebaseAvailable && uid) {
+      try {
+        const existingSnap = await getDoc(doc(db, 'users', uid));
+        if (existingSnap.exists()) {
+          const d = existingSnap.data();
+          if (d.notes) existingNotes = d.notes;
+          if (d.createdAt) existingCreatedAt = d.createdAt;
+        }
+      } catch (e) {
+        console.warn("Could not read previous doc data:", e);
       }
     }
 
     const logPath = `users/${uid}`;
-    const payload = {
+    const payload: any = {
       uid: uid,
-      username: user.username.trim().toLowerCase(),
-      displayName: user.displayName.trim(),
+      id: uid,
+      username: cleanUsername,
+      displayName: cleanDisplayName,
       role: user.role,
       level: user.level || '5',
-      password: user.password.trim(),
+      password: cleanPassword,
       subject: user.subject || '',
       assignedClasses: user.assignedClasses || [],
+      createdAt: existingCreatedAt,
       updatedAt: new Date().toISOString()
     };
+    if (user.role === 'student') {
+      payload.notes = existingNotes;
+    }
     
     console.log(`[dbService] saveUserAccount payload for Firestore doc ${uid}:`, payload);
     
     if (isFirebaseAvailable) {
       try {
+        // Update the document in place
         await setDoc(doc(db, 'users', uid), payload, { merge: true });
         console.log(`[dbService] Successfully wrote document to Firestore path: ${logPath}`);
-        return; // single source of truth - bypass local storage writing when online
+
+        // If the username was modified and there was a legacy doc keyed by uid_oldusername that differs from uid
+        if (originalUsername && originalUsername !== cleanUsername) {
+          const legacyOldUid = `uid_${originalUsername}`;
+          if (legacyOldUid !== uid) {
+            try {
+              await deleteDoc(doc(db, 'users', legacyOldUid));
+              console.log(`[dbService] Cleaned up legacy doc ID from renamed username: ${legacyOldUid}`);
+            } catch (delErr) {
+              console.warn("Could not delete legacy doc ID for renamed username:", delErr);
+            }
+          }
+        }
+
+        // If the document ID was migrated from an old ID, delete the old document so no duplicate remains
+        if (originalDocId && originalDocId !== uid) {
+          try {
+            await deleteDoc(doc(db, 'users', originalDocId));
+            console.log(`[dbService] Cleaned up legacy doc ID: ${originalDocId}`);
+          } catch (delErr) {
+            console.warn("Could not delete legacy doc ID:", delErr);
+          }
+        }
       } catch (error) {
         console.error(`[dbService] Firestore document write failure for ${logPath}:`, error);
         handleFirestoreError(error, OperationType.WRITE, logPath);
       }
     }
 
-    // Sync to unified local storage ONLY in fallback offline mode
+    // Always sync unified local storage cache so offline and fallback data remain consistent
     const localUsers = getLocalItems<any>('edu_users_all');
-    const existingIndex = localUsers.findIndex(u => u.id === uid || u.username === payload.username);
+    const existingIndex = localUsers.findIndex(u => 
+      (originalDocId && (u.id === originalDocId || u.uid === originalDocId)) ||
+      u.id === uid || 
+      u.uid === uid ||
+      (originalUsername && u.username?.toLowerCase() === originalUsername) ||
+      u.username?.toLowerCase() === cleanUsername
+    );
     if (existingIndex !== -1) {
-      localUsers[existingIndex] = { id: uid, ...payload };
+      localUsers[existingIndex] = { ...localUsers[existingIndex], ...payload, id: uid, uid: uid };
     } else {
-      localUsers.push({ id: uid, ...payload });
+      localUsers.push({ id: uid, uid: uid, ...payload });
     }
     saveLocalItems('edu_users_all', localUsers);
-    console.log(`[dbService] Local fallback cache 'edu_users_all' synced. Total count: ${localUsers.length}`);
 
-    // Backward compatibility sync with existing student list if student
+    // Sync student list if student
     if (user.role === 'student') {
       const localStudentAccounts = getLocalItems<any>('edu_student_accounts');
-      const idx = localStudentAccounts.findIndex(u => u.id === uid);
+      const idx = localStudentAccounts.findIndex(u => 
+        (originalDocId && (u.id === originalDocId || u.uid === originalDocId)) ||
+        u.id === uid || 
+        u.uid === uid ||
+        (originalUsername && u.username?.toLowerCase() === originalUsername) ||
+        u.username?.toLowerCase() === cleanUsername
+      );
+      const prevNotes = idx !== -1 ? (localStudentAccounts[idx].notes || existingNotes) : existingNotes;
       const studPayload = {
          id: uid,
          uid: uid,
-         username: user.username.trim().toLowerCase(),
-         displayName: user.displayName.trim(),
+         username: cleanUsername,
+         displayName: cleanDisplayName,
          level: user.level || '5',
-         password: user.password.trim(),
-         notes: '',
+         password: cleanPassword,
+         notes: prevNotes,
          role: 'student',
-         createdAt: new Date().toISOString()
+         updatedAt: new Date().toISOString()
       };
       if (idx !== -1) {
-         localStudentAccounts[idx] = studPayload;
+         localStudentAccounts[idx] = { ...localStudentAccounts[idx], ...studPayload };
       } else {
          localStudentAccounts.push(studPayload);
       }
       saveLocalItems('edu_student_accounts', localStudentAccounts);
+
+      // Also sync student notes to retain personal notes with the updated name/username
+      const localNotes = getLocalItems<any>('edu_student_notes');
+      const noteIdx = localNotes.findIndex(n => 
+        (originalDocId && (n.id === originalDocId || n.uid === originalDocId)) ||
+        n.id === uid || 
+        n.uid === uid ||
+        (originalUsername && n.username?.toLowerCase() === originalUsername) ||
+        n.username?.toLowerCase() === cleanUsername
+      );
+      if (noteIdx !== -1) {
+        localNotes[noteIdx].displayName = cleanDisplayName;
+        localNotes[noteIdx].username = cleanUsername;
+        localNotes[noteIdx].level = user.level || '5';
+        saveLocalItems('edu_student_notes', localNotes);
+      }
     }
   },
 
@@ -1279,22 +1373,27 @@ export const dbService = {
         firebaseUsers = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
 
         // Single Source of Truth: In online mode, map and return database accounts exclusively
-        const dbList = firebaseUsers.filter(fUser => {
-          return fUser.role !== UserRole.TEACHER && fUser.username !== 'teacher' && fUser.username !== 'custom_teacher' && fUser.id !== 'custom_teacher';
-        }).map(fUser => {
+        const uniqueStudMap = new Map<string, any>();
+        firebaseUsers.filter(fUser => {
+          const role = (fUser.role || '').toLowerCase();
+          const uname = (fUser.username || '').toLowerCase();
+          return role !== 'teacher' && role !== 'superadmin' && role !== UserRole.TEACHER && role !== UserRole.SUPERADMIN && uname !== 'teacher' && uname !== 'superadmin' && uname !== 'custom_teacher' && fUser.id !== 'custom_teacher';
+        }).forEach(fUser => {
           const username = fUser.username || fUser.id.replace('uid_', '');
-          return {
+          const item = {
             id: fUser.id || `uid_${username}`,
             username: username,
             displayName: fUser.displayName || 'تلميذ غير مسمى',
             level: fUser.level || '5',
             password: fUser.password || '123456',
             notes: fUser.notes || '',
-            role: fUser.role || 'student',
+            role: 'student',
             ...(fUser as any)
           };
+          uniqueStudMap.set(username.toLowerCase(), item);
         });
 
+        const dbList = Array.from(uniqueStudMap.values());
         if (level) {
           return dbList.filter(acc => acc.level === level);
         }
@@ -1334,14 +1433,267 @@ export const dbService = {
     return list;
   },
 
-  addStudentAccount: async (displayName: string, level: '5' | '6', username: string, password: string): Promise<any> => {
-    console.log("[dbService] addStudentAccount triggered for student:", { displayName, level, username });
-    let uid = `uid_${username.trim().toLowerCase()}`;
+  updateStudentAccount: async (params: {
+    id: string;
+    displayName: string;
+    username: string;
+    level: '5' | '6';
+    password: string;
+    originalUsername?: string;
+    originalDisplayName?: string;
+  }): Promise<any> => {
+    const cleanUsername = params.username.trim().toLowerCase();
+    const cleanDisplayName = params.displayName.trim();
+    const cleanPassword = params.password.trim();
+    const targetUid = params.id;
+    const originalUser = params.originalUsername ? params.originalUsername.trim().toLowerCase() : undefined;
+    const originalName = params.originalDisplayName ? params.originalDisplayName.trim() : undefined;
+
+    console.log(`[dbService] updateStudentAccount updating student ${targetUid}:`, { cleanDisplayName, cleanUsername, level: params.level });
+
+    let existingNotes = '';
+    let existingCreatedAt = new Date().toISOString();
+
+    // Check existing document in Firestore
+    if (isFirebaseAvailable) {
+      try {
+        const docSnap = await getDoc(doc(db, 'users', targetUid));
+        if (docSnap.exists()) {
+          const d = docSnap.data();
+          existingNotes = d.notes || '';
+          if (d.createdAt) existingCreatedAt = d.createdAt;
+        } else if (originalUser) {
+          const q = query(collection(db, 'users'), where('username', '==', originalUser));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const d = snap.docs[0].data();
+            existingNotes = d.notes || '';
+            if (d.createdAt) existingCreatedAt = d.createdAt;
+          }
+        }
+      } catch (e) {
+        console.warn("[dbService] Note: checking existing student doc:", e);
+      }
+    }
+
+    // Attempt Firebase Auth dual-write for the updated username/password
+    if (isFirebaseAvailable) {
+      try {
+        await createAuthUserSafely(cleanUsername, cleanPassword);
+      } catch (authErr) {
+        console.warn("[dbService] Auth sync note during student update:", authErr);
+      }
+    }
+
+    const payload = {
+      id: targetUid,
+      uid: targetUid,
+      username: cleanUsername,
+      displayName: cleanDisplayName,
+      level: params.level,
+      password: cleanPassword,
+      notes: existingNotes,
+      role: 'student',
+      createdAt: existingCreatedAt,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (isFirebaseAvailable) {
+      try {
+        await setDoc(doc(db, 'users', targetUid), payload, { merge: true });
+        console.log(`[dbService] Document updated successfully at users/${targetUid}`);
+
+        // If username changed and there was a legacy document keyed by uid_oldusername
+        if (originalUser && originalUser !== cleanUsername) {
+          const oldLegacyId = `uid_${originalUser}`;
+          if (oldLegacyId !== targetUid) {
+            try {
+              await deleteDoc(doc(db, 'users', oldLegacyId));
+              console.log(`[dbService] Pruned old student doc: ${oldLegacyId}`);
+            } catch (err) {
+              console.warn("Could not delete old student doc:", err);
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`[dbService] Firestore document write failure for student users/${targetUid}:`, error);
+        handleFirestoreError(error, OperationType.WRITE, `users/${targetUid}`);
+      }
+    }
+
+    // Sync in edu_student_accounts in place
+    const localAccounts = getLocalItems<any>('edu_student_accounts');
+    const accIdx = localAccounts.findIndex(acc => 
+      acc.id === targetUid || 
+      acc.uid === targetUid || 
+      (originalUser && acc.username?.toLowerCase() === originalUser) ||
+      acc.username?.toLowerCase() === cleanUsername ||
+      (originalName && acc.displayName === originalName)
+    );
+    if (accIdx !== -1) {
+      const prevNotes = localAccounts[accIdx].notes || existingNotes;
+      localAccounts[accIdx] = { ...localAccounts[accIdx], ...payload, notes: prevNotes };
+    } else {
+      localAccounts.push(payload);
+    }
+    saveLocalItems('edu_student_accounts', localAccounts);
+
+    // Sync in edu_users_all in place
+    const localUsers = getLocalItems<any>('edu_users_all');
+    const userIdx = localUsers.findIndex(u => 
+      u.id === targetUid || 
+      u.uid === targetUid || 
+      (originalUser && u.username?.toLowerCase() === originalUser) ||
+      u.username?.toLowerCase() === cleanUsername ||
+      (originalName && u.displayName === originalName)
+    );
+    if (userIdx !== -1) {
+      localUsers[userIdx] = { ...localUsers[userIdx], ...payload };
+    } else {
+      localUsers.push(payload);
+    }
+    saveLocalItems('edu_users_all', localUsers);
+
+    // Sync in edu_student_notes in place
+    const localNotes = getLocalItems<any>('edu_student_notes');
+    const noteIdx = localNotes.findIndex(n => 
+      n.id === targetUid || 
+      n.uid === targetUid || 
+      (originalUser && n.username?.toLowerCase() === originalUser) ||
+      (originalName && n.displayName === originalName)
+    );
+    if (noteIdx !== -1) {
+      localNotes[noteIdx].displayName = cleanDisplayName;
+      localNotes[noteIdx].username = cleanUsername;
+      localNotes[noteIdx].level = params.level;
+    } else {
+      localNotes.push({ id: targetUid, username: cleanUsername, displayName: cleanDisplayName, level: params.level, notes: existingNotes, role: 'student' });
+    }
+    saveLocalItems('edu_student_notes', localNotes);
+
+    // Sync student name in scores and absences if name changed
+    if (originalName && originalName !== cleanDisplayName) {
+      const scores = getLocalItems<any>('edu_scores');
+      let scoreChanged = false;
+      scores.forEach(s => {
+        if (s.studentName === originalName) {
+          s.studentName = cleanDisplayName;
+          scoreChanged = true;
+        }
+      });
+      if (scoreChanged) saveLocalItems('edu_scores', scores);
+
+      const absences = getLocalItems<any>('edu_absences');
+      let absChanged = false;
+      absences.forEach(a => {
+        if (a.studentName === originalName) {
+          a.studentName = cleanDisplayName;
+          absChanged = true;
+        }
+      });
+      if (absChanged) saveLocalItems('edu_absences', absences);
+    }
+
+    return payload;
+  },
+
+  addStudentAccount: async (
+    displayName: string, 
+    level: '5' | '6', 
+    username: string, 
+    password: string,
+    existingId?: string,
+    originalUsername?: string
+  ): Promise<any> => {
+    console.log("[dbService] addStudentAccount triggered for student:", { displayName, level, username, existingId });
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanDisplayName = displayName.trim();
+    const cleanPassword = password.trim();
+
+    // 1. If existingId is provided, delegate to updateStudentAccount directly!
+    if (existingId) {
+      return await dbService.updateStudentAccount({
+        id: existingId,
+        displayName: cleanDisplayName,
+        username: cleanUsername,
+        level,
+        password: cleanPassword,
+        originalUsername
+      });
+    }
+
+    // 2. Check if a student with the same username or displayName already exists
+    let matchedDocId: string | null = null;
+    let matchedOriginalUsername: string | undefined = undefined;
+    let matchedOriginalDisplayName: string | undefined = undefined;
+
+    if (isFirebaseAvailable) {
+      try {
+        // Check by username in Firestore
+        const qUser = query(collection(db, 'users'), where('username', '==', cleanUsername));
+        const snapUser = await getDocs(qUser);
+        if (!snapUser.empty) {
+          const docItem = snapUser.docs[0];
+          matchedDocId = docItem.id;
+          matchedOriginalUsername = docItem.data().username;
+          matchedOriginalDisplayName = docItem.data().displayName;
+          console.log(`[dbService] Found existing student by username: ${matchedDocId}. Updating existing account.`);
+        } else {
+          // Check by displayName and level in Firestore
+          const qName = query(
+            collection(db, 'users'), 
+            where('displayName', '==', cleanDisplayName),
+            where('level', '==', level)
+          );
+          const snapName = await getDocs(qName);
+          if (!snapName.empty) {
+            const docItem = snapName.docs[0];
+            matchedDocId = docItem.id;
+            matchedOriginalUsername = docItem.data().username;
+            matchedOriginalDisplayName = docItem.data().displayName;
+            console.log(`[dbService] Found existing student by displayName: ${matchedDocId}. Updating existing account.`);
+          }
+        }
+      } catch (checkErr) {
+        console.warn("[dbService] Error querying existing student in Firestore:", checkErr);
+      }
+    }
+
+    // Also check local store if not found in Firestore
+    if (!matchedDocId) {
+      const localAccounts = getLocalItems<any>('edu_student_accounts');
+      const localMatch = localAccounts.find(acc => 
+        acc.username?.toLowerCase() === cleanUsername || 
+        (acc.displayName?.trim().toLowerCase() === cleanDisplayName.toLowerCase() && acc.level === level)
+      );
+      if (localMatch) {
+        matchedDocId = localMatch.id || `uid_${localMatch.username}`;
+        matchedOriginalUsername = localMatch.username;
+        matchedOriginalDisplayName = localMatch.displayName;
+        console.log(`[dbService] Found existing student in local store: ${matchedDocId}. Updating existing account.`);
+      }
+    }
+
+    // If an existing student was matched, UPDATE their existing account in place!
+    if (matchedDocId) {
+      return await dbService.updateStudentAccount({
+        id: matchedDocId,
+        displayName: cleanDisplayName,
+        username: cleanUsername,
+        level,
+        password: cleanPassword,
+        originalUsername: matchedOriginalUsername,
+        originalDisplayName: matchedOriginalDisplayName
+      });
+    }
+
+    // 3. Otherwise, create a brand new account for this student
+    let uid = `uid_${cleanUsername}`;
     
     if (isFirebaseAvailable) {
       try {
-        console.log(`[dbService] Dual-write active: creating Authentication account for student: ${username}`);
-        const authUid = await createAuthUserSafely(username, password);
+        console.log(`[dbService] Dual-write active: creating Authentication account for student: ${cleanUsername}`);
+        const authUid = await createAuthUserSafely(cleanUsername, cleanPassword);
         if (authUid) {
           console.log(`[dbService] Auth account created successfully with UID: ${authUid}. Overriding destination ID.`);
           uid = authUid;
@@ -1580,11 +1932,12 @@ export const dbService = {
       
       const q = query(collection(db, 'users'), where('role', '==', 'student'));
       unsubscribeStudents = onSnapshot(q, (snapshot) => {
-        const list: any[] = [];
+        const uniqueMap = new Map<string, any>();
         snapshot.docs.forEach(docSnap => {
           const detail = docSnap.data();
           if (assignedClasses.includes(detail.level)) {
-            list.push({
+            const username = (detail.username || docSnap.id).toLowerCase();
+            uniqueMap.set(username, {
               id: docSnap.id,
               uid: docSnap.id,
               username: detail.username,
@@ -1596,7 +1949,7 @@ export const dbService = {
             });
           }
         });
-        onUpdate(list);
+        onUpdate(Array.from(uniqueMap.values()));
       });
     }, (err) => {
       console.error("Error subscribing to teacher's profile in real-time:", err);

@@ -222,14 +222,16 @@ export default function SuperAdminDashboard({ session, onLogout, firebaseStatus 
     setIsUpdatingUser(true);
     try {
       await dbService.saveUserAccount({
-        id: editingUser.id,
+        id: editingUser.id || editingUser.uid,
         username: editingUsername.trim().toLowerCase(),
         displayName: editingDisplayName.trim(),
         role: editingRole,
         level: editingRole === 'student' ? editingLevel : undefined,
         subject: editingRole === 'teacher' ? editingSubject : undefined,
         assignedClasses: editingRole === 'teacher' ? editingAssignedClasses : undefined,
-        password: editingPassword.trim()
+        password: editingPassword.trim(),
+        originalUsername: editingUser.username,
+        originalDisplayName: editingUser.displayName
       });
 
       triggerToast(`تم تحديث حساب (${editingDisplayName}) بنجاح!`);

@@ -40,7 +40,8 @@ import {
   Lock,
   Megaphone,
   Bell,
-  Link2
+  Link2,
+  Sliders
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -184,6 +185,15 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   const [isDeletingAccId, setIsDeletingAccId] = useState<string | null>(null);
   const [selectedStudentUids, setSelectedStudentUids] = useState<string[]>([]);
   const [isDeletingBatchStudents, setIsDeletingBatchStudents] = useState<boolean>(false);
+
+  // Edit Student Account state
+  const [editingStudentAccount, setEditingStudentAccount] = useState<any | null>(null);
+  const [editAccName, setEditAccName] = useState('');
+  const [editAccUsername, setEditAccUsername] = useState('');
+  const [editAccLevel, setEditAccLevel] = useState<'5' | '6'>('5');
+  const [editAccPassword, setEditAccPassword] = useState('');
+  const [isUpdatingAcc, setIsUpdatingAcc] = useState<boolean>(false);
+  const [editAccError, setEditAccError] = useState<string | null>(null);
 
   // In-app confirmation modal state to avoid iframe window.confirm blocking
   const [confirmModal, setConfirmModal] = useState<{
@@ -392,40 +402,172 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
     }
   };
 
+  const handleOpenEditStudentModal = (acc: any) => {
+    setEditingStudentAccount(acc);
+    setEditAccName(acc.displayName || '');
+    setEditAccUsername(acc.username || '');
+    setEditAccLevel(acc.level || '5');
+    setEditAccPassword(acc.password || `primary${acc.level || '5'}`);
+    setEditAccError(null);
+  };
+
+  const handleSaveEditStudentAccount = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingStudentAccount) return;
+    setEditAccError(null);
+
+    const cleanName = editAccName.trim();
+    const cleanUser = editAccUsername.trim().toLowerCase();
+    const cleanPass = editAccPassword.trim();
+
+    if (!cleanName || !cleanUser || !cleanPass) {
+      setEditAccError('يرجى ملء جميع الحقول لتحديث الحساب.');
+      return;
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(cleanUser)) {
+      setEditAccError('اسم المستخدم يجب أن يحتوي على أحرف وأرقام لاتينية وشرطة سفلية فقط دون فراغات (مثال: ahmed_alami).');
+      return;
+    }
+
+    // Check if the new username conflicts with another student's username (excluding this student)
+    const targetUid = editingStudentAccount.id || `uid_${editingStudentAccount.username}`;
+    const duplicate = studentAccounts.some(s => {
+      const sUid = s.id || `uid_${s.username}`;
+      return sUid !== targetUid && s.username?.toLowerCase() === cleanUser;
+    });
+    if (duplicate) {
+      setEditAccError('اسم المستخدم هذا مستخدم بالفعل لتلميذ آخر. يرجى اختيار اسم مستخدم فريد.');
+      return;
+    }
+
+    setIsUpdatingAcc(true);
+    try {
+      const updated = await dbService.updateStudentAccount({
+        id: targetUid,
+        displayName: cleanName,
+        username: cleanUser,
+        level: editAccLevel,
+        password: cleanPass,
+        originalUsername: editingStudentAccount.username,
+        originalDisplayName: editingStudentAccount.displayName
+      });
+
+      // Update studentAccounts in place without full reload
+      setStudentAccounts(prev => prev.map(s => {
+        const sUid = s.id || `uid_${s.username}`;
+        if (sUid === targetUid || s.username?.toLowerCase() === editingStudentAccount.username?.toLowerCase()) {
+          return {
+            ...s,
+            id: updated.id || targetUid,
+            displayName: cleanName,
+            username: cleanUser,
+            level: editAccLevel,
+            password: cleanPass
+          };
+        }
+        return s;
+      }));
+
+      // Update studentNotes in place
+      setStudentNotes(prev => prev.map(n => {
+        if (n.id === targetUid || n.username?.toLowerCase() === editingStudentAccount.username?.toLowerCase() || n.displayName === editingStudentAccount.displayName) {
+          return {
+            ...n,
+            displayName: cleanName,
+            username: cleanUser,
+            level: editAccLevel
+          };
+        }
+        return n;
+      }));
+
+      setAccSuccess(`✅ تم بنجاح تعديل وتحديث بيانات حساب التلميذ(ة) "${cleanName}" والاحتفاظ بنفس الحساب.`);
+      setEditingStudentAccount(null);
+    } catch (err: any) {
+      console.error("Error updating student account:", err);
+      setEditAccError(err.message || 'فشلت عملية تحديث الحساب. يرجى تكرار المحاولة.');
+    } finally {
+      setIsUpdatingAcc(false);
+    }
+  };
+
   const handleCreateStudentAccount = async (e: FormEvent) => {
     e.preventDefault();
     setAccSuccess(null);
     setAccError(null);
 
-    if (!newAccName.trim() || !newAccUsername.trim() || !newAccPassword.trim()) {
+    const cleanName = newAccName.trim();
+    const cleanUser = newAccUsername.trim().toLowerCase();
+    const cleanPass = newAccPassword.trim();
+
+    if (!cleanName || !cleanUser || !cleanPass) {
       setAccError('يرجى ملء جميع الحقول لتوليد الحساب الجديد.');
       return;
     }
 
+    // Check if this student already exists in studentAccounts by username or name
+    const existingStudent = studentAccounts.find(s => 
+      s.username?.toLowerCase() === cleanUser ||
+      (s.displayName?.trim().toLowerCase() === cleanName.toLowerCase() && s.level === newAccLevel)
+    );
+
     setIsCreatingAcc(true);
     try {
-      const added = await dbService.addStudentAccount(
-        newAccName.trim(),
-        newAccLevel,
-        newAccUsername.trim().toLowerCase(),
-        newAccPassword.trim()
-      );
-      // Refresh Lists
-      setStudentAccounts(prev => [added, ...prev]);
-      
-      // Update notes local state so they show up on Notes tab
-      setStudentNotes(prev => [
-        {
-          id: added.id,
-          username: added.username,
-          displayName: added.displayName,
-          level: added.level,
-          notes: ''
-        },
-        ...prev
-      ]);
+      if (existingStudent) {
+        // Instead of creating a duplicate account, update the existing account in place!
+        const targetUid = existingStudent.id || `uid_${existingStudent.username}`;
+        const updated = await dbService.updateStudentAccount({
+          id: targetUid,
+          displayName: cleanName,
+          username: cleanUser,
+          level: newAccLevel,
+          password: cleanPass,
+          originalUsername: existingStudent.username,
+          originalDisplayName: existingStudent.displayName
+        });
 
-      setAccSuccess(`تم توليد حساب التلميذ(ة) "${newAccName}" بنجاح! يمكنه الآن تسجيل الدخول مباشرة.`);
+        setStudentAccounts(prev => prev.map(s => {
+          const sUid = s.id || `uid_${s.username}`;
+          if (sUid === targetUid) {
+            return { ...s, displayName: cleanName, username: cleanUser, level: newAccLevel, password: cleanPass };
+          }
+          return s;
+        }));
+
+        setStudentNotes(prev => prev.map(n => {
+          if (n.id === targetUid || n.displayName === existingStudent.displayName) {
+            return { ...n, displayName: cleanName, username: cleanUser, level: newAccLevel };
+          }
+          return n;
+        }));
+
+        setAccSuccess(`✅ تم التعرف على التلميذ وتحديث حسابه القائم "${cleanName}" والاحتفاظ بنفس الحساب بدلاً من إنشاء حساب جديد.`);
+      } else {
+        const added = await dbService.addStudentAccount(
+          cleanName,
+          newAccLevel,
+          cleanUser,
+          cleanPass
+        );
+        // Refresh Lists
+        setStudentAccounts(prev => [added, ...prev]);
+        
+        // Update notes local state so they show up on Notes tab
+        setStudentNotes(prev => [
+          {
+            id: added.id,
+            username: added.username,
+            displayName: added.displayName,
+            level: added.level,
+            notes: ''
+          },
+          ...prev
+        ]);
+
+        setAccSuccess(`تم توليد حساب التلميذ(ة) "${cleanName}" بنجاح! يمكنه الآن تسجيل الدخول مباشرة.`);
+      }
       
       // Reset Form fields
       setNewAccName('');
@@ -3008,6 +3150,21 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                         placeholder="مثال: يوسف الإدريسي"
                         className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100/50 text-xs font-semibold text-slate-850 transition-all shadow-sm"
                       />
+                      {newAccName.trim() && studentAccounts.some(s => s.displayName?.trim().toLowerCase() === newAccName.trim().toLowerCase() || (newAccUsername && s.username?.toLowerCase() === newAccUsername.toLowerCase())) && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-bold text-amber-900 flex items-center justify-between gap-2 mt-2">
+                          <span className="leading-snug">💡 ملاحظة: هذا التلميذ مسجل بالفعل. سيتم تحديث حسابه القائم والاحتفاظ بنفس الحساب بدلاً من إنشاء حساب جديد مكرر.</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const match = studentAccounts.find(s => s.displayName?.trim().toLowerCase() === newAccName.trim().toLowerCase() || (newAccUsername && s.username?.toLowerCase() === newAccUsername.toLowerCase()));
+                              if (match) handleOpenEditStudentModal(match);
+                            }}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-black cursor-pointer shrink-0"
+                          >
+                            تعديل حسابه الآن
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Class/Level Selector */}
@@ -3264,14 +3421,27 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                                       {acc.password || `primary${acc.level}`}
                                     </td>
                                     <td className="py-3 px-4 text-center">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteStudentAccount(uid, acc.displayName)}
-                                        disabled={isDeletingAccId === acc.id || isDeletingBatchStudents}
-                                        className="p-1 px-2.5 bg-red-50 hover:bg-red-100 text-red-650 hover:text-red-750 font-black rounded-lg text-[10px] transition cursor-pointer disabled:opacity-40"
-                                      >
-                                        {isDeletingAccId === acc.id ? 'جاري الحذف...' : 'حذف 🗑️'}
-                                      </button>
+                                      <div className="flex items-center justify-center gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditStudentModal(acc)}
+                                          className="p-1 px-2.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-black rounded-lg text-[10px] transition cursor-pointer inline-flex items-center gap-1 border border-sky-200/60 shadow-xs"
+                                          title="تعديل بيانات الحساب واسم المستخدم"
+                                        >
+                                          <Sliders className="w-3 h-3 text-sky-600" />
+                                          <span>تعديل</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteStudentAccount(uid, acc.displayName)}
+                                          disabled={isDeletingAccId === acc.id || isDeletingBatchStudents}
+                                          className="p-1 px-2.5 bg-red-50 hover:bg-red-100 text-red-650 hover:text-red-750 font-black rounded-lg text-[10px] transition cursor-pointer disabled:opacity-40 inline-flex items-center gap-1 border border-red-200/50 shadow-xs"
+                                          title="حذف الحساب نهائياً"
+                                        >
+                                          <Trash2 className="w-3 h-3 text-red-500" />
+                                          <span>{isDeletingAccId === acc.id ? 'جاري...' : 'حذف'}</span>
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 );
@@ -4262,6 +4432,140 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
                 إلغاء الأمر
               </button>
             </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Interactive Edit Student Account Modal */}
+      {editingStudentAccount && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0, y: 15 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-sky-100 space-y-5 text-right relative max-h-[90vh] overflow-y-auto"
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between pb-3.5 border-b border-sky-50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-sky-100 text-sky-700 rounded-2xl">
+                  <Sliders className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900">تعديل بيانات وحساب التلميذ(ة)</h3>
+                  <p className="text-[11px] text-slate-500 font-bold">الاحتفاظ بنفس الحساب والسجلات وتعديل الاسم أو اسم المستخدم</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingStudentAccount(null)}
+                className="text-slate-400 hover:text-slate-600 font-black text-sm p-1.5 hover:bg-slate-100 rounded-lg transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {editAccError && (
+              <div className="p-3 bg-rose-50 border-r-4 border-rose-500 text-rose-700 text-xs font-bold rounded-xl flex items-center gap-2">
+                <span>⚠</span>
+                <span>{editAccError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveEditStudentAccount} className="space-y-4">
+              {/* Display Name */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-700">الاسم الكامل للتلميذ(ة) بالعربية:</label>
+                <input
+                  type="text"
+                  required
+                  value={editAccName}
+                  onChange={(e) => setEditAccName(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-400 transition"
+                />
+              </div>
+
+              {/* Level */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-700">المستوى الدراسي:</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditAccLevel('5')}
+                    className={`py-2 px-3 rounded-xl text-xs font-black border transition cursor-pointer text-center ${
+                      editAccLevel === '5'
+                        ? 'bg-blue-50 text-blue-700 border-blue-400 font-black ring-2 ring-blue-100'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    المستوى الخامس
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditAccLevel('6')}
+                    className={`py-2 px-3 rounded-xl text-xs font-black border transition cursor-pointer text-center ${
+                      editAccLevel === '6'
+                        ? 'bg-indigo-50 text-indigo-700 border-indigo-400 font-black ring-2 ring-indigo-100'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    المستوى السادس
+                  </button>
+                </div>
+              </div>
+
+              {/* Username */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-700">اسم المستخدم للولوج (@username):</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 font-mono font-black text-xs">@</span>
+                  <input
+                    type="text"
+                    required
+                    value={editAccUsername}
+                    onChange={(e) => setEditAccUsername(e.target.value.toLowerCase().trim())}
+                    className="w-full pl-4 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-400 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-black text-slate-700">كلمة المرور للولوج:</label>
+                <input
+                  type="text"
+                  required
+                  value={editAccPassword}
+                  onChange={(e) => setEditAccPassword(e.target.value.trim())}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-sky-400 transition"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 grid grid-cols-2 gap-3 border-t border-sky-50">
+                <button
+                  type="submit"
+                  disabled={isUpdatingAcc}
+                  className="py-3 px-4 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-xs font-black transition cursor-pointer shadow-md shadow-sky-500/10 disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+                >
+                  {isUpdatingAcc ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>جاري الحفظ...</span>
+                    </>
+                  ) : (
+                    <span>💾 حفظ التعديلات والاحتفاظ بالحساب</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={isUpdatingAcc}
+                  onClick={() => setEditingStudentAccount(null)}
+                  className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
           </motion.div>
         </div>
       )}
