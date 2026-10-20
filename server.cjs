@@ -100,7 +100,7 @@ Directives importantes de formulation :
 4. \u0644\u0627 \u062A\u0633\u062A\u062E\u062F\u0645 \u0648\u0644\u0627 \u062A\u062F\u0631\u062C \u0623\u064A \u0631\u0645\u0648\u0632 \u062A\u0639\u0628\u064A\u0631\u064A\u0629 (Emojis) \u0646\u0647\u0627\u0626\u064A\u0627\u064B.`;
       }
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.8-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
