@@ -1279,7 +1279,16 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
         let errorMsg = 'حدث فشل غير معروف أثناء محاولة الاتصال بالسيرفر.';
         if (contentType && contentType.includes('application/json')) {
           const resData = await response.json();
-          errorMsg = resData.error || errorMsg;
+          let rawError = resData.error || errorMsg;
+          if (typeof rawError === 'string') {
+            try {
+              const parsed = JSON.parse(rawError);
+              rawError = parsed.message || parsed.error?.message || rawError;
+            } catch {
+              // keep as is
+            }
+          }
+          errorMsg = rawError;
         } else {
           const text = await response.text();
           if (response.status === 404) {
