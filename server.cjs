@@ -99,57 +99,101 @@ Directives importantes de formulation :
 3. \u0644\u063A\u0629 \u0641\u0635\u064A\u062D\u0629 \u0648\u0633\u0644\u064A\u0645\u0629 \u0645\u0634\u0643\u0644\u0629 \u062C\u064A\u062F\u0627\u064B: \u064A\u062C\u0628 \u0623\u0646 \u062A\u0643\u062A\u0628 \u062C\u0645\u064A\u0639 \u0627\u0644\u0623\u0633\u0626\u0644\u0629 \u0648\u0627\u0644\u0623\u062C\u0648\u0628\u0629 \u0628\u0644\u063A\u0629 \u0639\u0631\u0628\u064A\u0629 \u0641\u0635\u064A\u062D\u0629 \u0648\u0633\u0644\u064A\u0645\u0629 100% \u0645\u0639 \u0627\u0644\u062A\u0634\u0643\u064A\u0644 \u0627\u0644\u062A\u0627\u0645 \u0644\u0644\u0643\u0644\u0645\u0627\u062A.
 4. \u0644\u0627 \u062A\u0633\u062A\u062E\u062F\u0645 \u0648\u0644\u0627 \u062A\u062F\u0631\u062C \u0623\u064A \u0631\u0645\u0648\u0632 \u062A\u0639\u0628\u064A\u0631\u064A\u0629 (Emojis) \u0646\u0647\u0627\u0626\u064A\u0627\u064B.`;
       }
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: import_genai.Type.OBJECT,
-            properties: {
-              questions: {
-                type: import_genai.Type.ARRAY,
-                description: "\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0623\u0633\u0626\u0644\u0629 \u0627\u0644\u062A\u0641\u0627\u0639\u0644\u064A\u0629 \u0627\u0644\u0645\u0648\u0644\u062F\u0629",
-                items: {
-                  type: import_genai.Type.OBJECT,
-                  properties: {
-                    question: {
-                      type: import_genai.Type.STRING,
-                      description: "\u0646\u0635 \u0627\u0644\u0633\u0624\u0627\u0644 \u0627\u0644\u062A\u0631\u0628\u0648\u064A \u0627\u0644\u0645\u0637\u0631\u0648\u062D \u0628\u0637\u0631\u064A\u0642\u0629 \u0648\u0627\u0636\u062D\u0629 \u0648\u0645\u0628\u0633\u0637\u0629"
+      const candidateModels = [
+        "gemini-3.1-flash-lite",
+        // Extremely fast, lightweight, high capacity, avoids high-demand spikes
+        "gemini-3.8-flash",
+        // Next generation flash model (with LOW thinking level)
+        "gemini-flash-latest"
+        // Fallback alias
+      ];
+      let questionsArray = [];
+      let lastError = null;
+      for (let i = 0; i < candidateModels.length; i++) {
+        const modelName = candidateModels[i];
+        try {
+          console.log(`[AI Generator Server] Attempting generation with model: ${modelName}`);
+          const config = {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: import_genai.Type.OBJECT,
+              properties: {
+                questions: {
+                  type: import_genai.Type.ARRAY,
+                  description: "\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0623\u0633\u0626\u0644\u0629 \u0627\u0644\u062A\u0641\u0627\u0639\u0644\u064A\u0629 \u0627\u0644\u0645\u0648\u0644\u062F\u0629",
+                  items: {
+                    type: import_genai.Type.OBJECT,
+                    properties: {
+                      question: {
+                        type: import_genai.Type.STRING,
+                        description: "\u0646\u0635 \u0627\u0644\u0633\u0624\u0627\u0644 \u0627\u0644\u062A\u0631\u0628\u0648\u064A \u0627\u0644\u0645\u0637\u0631\u0648\u062D \u0628\u0637\u0631\u064A\u0642\u0629 \u0648\u0627\u0636\u062D\u0629 \u0648\u0645\u0628\u0633\u0637\u0629"
+                      },
+                      correctAnswer: {
+                        type: import_genai.Type.STRING,
+                        description: "\u0627\u0644\u062C\u0648\u0627\u0628 \u0627\u0644\u0635\u062D\u064A\u062D \u0628\u062F\u0642\u0629 \u0648\u0643\u0644\u0645\u0627\u062A \u0642\u0644\u064A\u0644\u0629 \u062C\u062F\u0627\u064B"
+                      },
+                      wrongAnswer1: {
+                        type: import_genai.Type.STRING,
+                        description: "\u0627\u0644\u062E\u064A\u0627\u0631 \u0627\u0644\u062E\u0627\u0637\u0626 \u0627\u0644\u0645\u0642\u062A\u0631\u062D \u0627\u0644\u0623\u0648\u0644 \u0628\u0643\u0644\u0645\u0627\u062A \u0642\u0644\u064A\u0644\u0629 \u062C\u062F\u0627\u064B"
+                      },
+                      wrongAnswer2: {
+                        type: import_genai.Type.STRING,
+                        description: "\u0627\u0644\u062E\u064A\u0627\u0631 \u0627\u0644\u062E\u0627\u0637\u0626 \u0627\u0644\u0645\u0642\u062A\u0631\u062D \u0627\u0644\u062B\u0627\u0646\u064A \u0628\u0643\u0644\u0645\u0627\u062A \u0642\u0644\u064A\u0644\u0629 \u062C\u062F\u0627\u064B"
+                      }
                     },
-                    correctAnswer: {
-                      type: import_genai.Type.STRING,
-                      description: "\u0627\u0644\u062C\u0648\u0627\u0628 \u0627\u0644\u0635\u062D\u064A\u062D \u0628\u062F\u0642\u0629 \u0648\u0643\u0644\u0645\u0627\u062A \u0642\u0644\u064A\u0644\u0629 \u062C\u062F\u0627\u064B"
-                    },
-                    wrongAnswer1: {
-                      type: import_genai.Type.STRING,
-                      description: "\u0627\u0644\u062E\u064A\u0627\u0631 \u0627\u0644\u062E\u0627\u0637\u0626 \u0627\u0644\u0645\u0642\u062A\u0631\u062D \u0627\u0644\u0623\u0648\u0644 \u0628\u0643\u0644\u0645\u0627\u062A \u0642\u0644\u064A\u0644\u0629 \u062C\u062F\u0627\u064B"
-                    },
-                    wrongAnswer2: {
-                      type: import_genai.Type.STRING,
-                      description: "\u0627\u0644\u062E\u064A\u0627\u0631 \u0627\u0644\u062E\u0627\u0637\u0626 \u0627\u0644\u0645\u0642\u062A\u0631\u062D \u0627\u0644\u062B\u0627\u0646\u064A \u0628\u0643\u0644\u0645\u0627\u062A \u0642\u0644\u064A\u0644\u0629 \u062C\u062F\u0627\u064B"
-                    }
-                  },
-                  required: ["question", "correctAnswer", "wrongAnswer1", "wrongAnswer2"]
+                    required: ["question", "correctAnswer", "wrongAnswer1", "wrongAnswer2"]
+                  }
                 }
-              }
-            },
-            required: ["questions"]
+              },
+              required: ["questions"]
+            }
+          };
+          if (modelName === "gemini-3.8-flash") {
+            config.thinkingConfig = { thinkingLevel: import_genai.ThinkingLevel.LOW };
+          }
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: prompt,
+            config
+          });
+          const responseText = response.text;
+          if (!responseText) {
+            throw new Error("\u0644\u0645 \u064A\u062A\u0645 \u062A\u0644\u0642\u064A \u0623\u064A \u0625\u062C\u0627\u0628\u0629 \u0646\u0635\u064A\u0629 \u0645\u0646 \u0646\u0645\u0648\u0630\u062C \u0627\u0644\u0630\u0643\u0627\u0621 \u0627\u0644\u0627\u0635\u0637\u0646\u0627\u0639\u064A.");
+          }
+          let cleanJson = responseText.trim();
+          if (cleanJson.startsWith("```json")) {
+            cleanJson = cleanJson.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+          } else if (cleanJson.startsWith("```")) {
+            cleanJson = cleanJson.replace(/^```\s*/, "").replace(/\s*```$/, "");
+          }
+          const parsedData = JSON.parse(cleanJson);
+          if (parsedData.questions && Array.isArray(parsedData.questions)) {
+            questionsArray = parsedData.questions;
+          } else if (Array.isArray(parsedData)) {
+            questionsArray = parsedData;
+          } else if (parsedData && typeof parsedData === "object") {
+            questionsArray = [parsedData];
+          }
+          if (questionsArray && questionsArray.length > 0) {
+            console.log(`[AI Generator Server] Successfully generated ${questionsArray.length} questions using ${modelName}`);
+            break;
+          }
+        } catch (err) {
+          lastError = err;
+          console.warn(`[AI Generator Server] Model ${modelName} encountered an error:`, err?.message || err);
+          const errMsg = (err?.message || "").toLowerCase();
+          const isTemporary = errMsg.includes("high demand") || errMsg.includes("503") || errMsg.includes("unavailable") || errMsg.includes("429");
+          if (isTemporary && i < candidateModels.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1200));
           }
         }
-      });
-      const responseText = response.text;
-      if (!responseText) {
-        throw new Error("\u0644\u0645 \u064A\u062A\u0645 \u062A\u0644\u0642\u064A \u0623\u064A \u0625\u062C\u0627\u0628\u0629 \u0646\u0635\u064A\u0629 \u0645\u0646 \u0646\u0645\u0648\u0630\u062C \u0627\u0644\u0630\u0643\u0627\u0621 \u0627\u0644\u0627\u0635\u0637\u0646\u0627\u0639\u064A.");
       }
-      const parsedData = JSON.parse(responseText.trim());
-      let questionsArray = [];
-      if (parsedData.questions && Array.isArray(parsedData.questions)) {
-        questionsArray = parsedData.questions;
-      } else if (Array.isArray(parsedData)) {
-        questionsArray = parsedData;
-      } else {
-        questionsArray = [parsedData];
+      if (!questionsArray || questionsArray.length === 0) {
+        const errMsg = (lastError?.message || "").toLowerCase();
+        if (errMsg.includes("high demand") || errMsg.includes("503") || errMsg.includes("unavailable") || errMsg.includes("capacity")) {
+          throw new Error("\u062E\u0648\u0627\u062F\u0645 \u0627\u0644\u0630\u0643\u0627\u0621 \u0627\u0644\u0627\u0635\u0637\u0646\u0627\u0639\u064A (Google Gemini) \u062A\u0634\u0647\u062F \u0636\u063A\u0637\u0627\u064B \u0645\u0624\u0642\u062A\u0627\u064B \u0645\u0631\u062A\u0641\u0639\u0627\u064B (High Demand). \u064A\u0631\u062C\u0649 \u0627\u0644\u0636\u063A\u0637 \u0639\u0644\u0649 \u0632\u0631 \u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u0645\u062D\u0627\u0648\u0644\u0629 \u0627\u0644\u0622\u0646 \u0648\u0633\u064A\u062A\u0648\u0644\u0649 \u0627\u0644\u0646\u0638\u0627\u0645 \u0627\u0644\u062A\u0628\u062F\u064A\u0644 \u0627\u0644\u062A\u0644\u0642\u0627\u0626\u064A \u0625\u0644\u0649 \u0646\u0645\u0648\u0630\u062C \u0641\u0648\u0631\u064A.");
+        }
+        throw lastError || new Error("\u0641\u0634\u0644\u062A \u0639\u0645\u0644\u064A\u0629 \u062A\u0648\u0644\u064A\u062F \u0627\u0644\u0623\u0633\u0626\u0644\u0629 \u0639\u0628\u0631 \u0627\u0644\u0646\u0645\u0627\u0630\u062C \u0627\u0644\u0645\u062A\u0648\u0641\u0631\u0629.");
       }
       res.json({
         success: true,
@@ -157,8 +201,12 @@ Directives importantes de formulation :
       });
     } catch (error) {
       console.error("\u062E\u0637\u0623 \u0623\u062B\u0646\u0627\u0621 \u062A\u0648\u0644\u064A\u062F \u0627\u0644\u0633\u0624\u0627\u0644 \u0628\u0648\u0627\u0633\u0637\u0629 \u0627\u0644\u0630\u0643\u0627\u0621 \u0627\u0644\u0627\u0635\u0637\u0646\u0627\u0639\u064A:", error);
+      let finalError = error.message || "\u062D\u062F\u062B \u062E\u0637\u0623 \u063A\u064A\u0631 \u0645\u062A\u0648\u0642\u0639 \u0623\u062B\u0646\u0627\u0621 \u0645\u062D\u0627\u0648\u0644\u0629 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0628\u0646\u0645\u0648\u0630\u062C \u0627\u0644\u0630\u0643\u0627\u0621 \u0627\u0644\u0627\u0635\u0637\u0646\u0627\u0639\u064A.";
+      if (finalError.toLowerCase().includes("high demand") || finalError.toLowerCase().includes("503") || finalError.toLowerCase().includes("unavailable")) {
+        finalError = "\u062E\u0648\u0627\u062F\u0645 \u0627\u0644\u0630\u0643\u0627\u0621 \u0627\u0644\u0627\u0635\u0637\u0646\u0627\u0639\u064A (Google Gemini) \u062A\u0634\u0647\u062F \u0636\u063A\u0637\u0627\u064B \u0645\u0624\u0642\u062A\u0627\u064B \u0645\u0631\u062A\u0641\u0639\u0627\u064B (High Demand). \u064A\u0631\u062C\u0649 \u0627\u0644\u0636\u063A\u0637 \u0639\u0644\u0649 \u0632\u0631 \u0625\u0639\u0627\u062F\u0629 \u0627\u0644\u0645\u062D\u0627\u0648\u0644\u0629 \u0627\u0644\u0622\u0646 \u0623\u0648 \u0627\u0644\u0627\u0646\u062A\u0638\u0627\u0631 \u0644\u0644\u062D\u0638\u0627\u062A \u0642\u0644\u064A\u0644\u0629.";
+      }
       res.status(500).json({
-        error: error.message || "\u062D\u062F\u062B \u062E\u0637\u0623 \u063A\u064A\u0631 \u0645\u062A\u0648\u0642\u0639 \u0623\u062B\u0646\u0627\u0621 \u0645\u062D\u0627\u0648\u0644\u0629 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0628\u0646\u0645\u0648\u0630\u062C \u0627\u0644\u0630\u0643\u0627\u0621 \u0627\u0644\u0627\u0635\u0637\u0646\u0627\u0639\u064A."
+        error: finalError
       });
     }
   });
