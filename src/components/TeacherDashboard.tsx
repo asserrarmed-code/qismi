@@ -41,7 +41,9 @@ import {
   Megaphone,
   Bell,
   Link2,
-  Sliders
+  Sliders,
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -1246,8 +1248,8 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
   };
 
   // Generate AI Interactive Question
-  const handleGenerateAiQuestion = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleGenerateAiQuestion = async (e?: FormEvent) => {
+    e?.preventDefault?.();
     setAiGeneratorError(null);
     setAiGeneratorSuccess(null);
     setShowAiPreview(false);
@@ -1288,6 +1290,13 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
               // keep as is
             }
           }
+
+          const rawErrorLower = String(rawError).toLowerCase();
+          if (rawErrorLower.includes('high demand') || rawErrorLower.includes('503') || rawErrorLower.includes('unavailable') || rawErrorLower.includes('overloaded')) {
+            rawError = "خوادم الذكاء الاصطناعي (Google Gemini) تشهد ضغطاً مؤقتاً في هذه اللحظة (High Demand). تم تزويد التطبيق بنماذج خفيفة وبديلة تلقائياً. يُرجى النقر على زر 'إعادة المحاولة الآن' للمحاولة عبر نموذج فوري.";
+          } else if (rawErrorLower.includes('no longer available') || rawErrorLower.includes('not_found')) {
+            rawError = "تم تحديث محرك الذكاء الاصطناعي إلى أحدث إصدارات Gemini الفورية والمتوافقة. يُرجى النقر على زر 'إعادة المحاولة الآن'.";
+          }
           errorMsg = rawError;
         } else {
           const text = await response.text();
@@ -1318,8 +1327,11 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
       const isHtmlResponse = err.message?.includes('غير صالحة بغير صيغة JSON') || err.message?.includes('DOCTYPE') || err.message?.includes('<html');
       
       let finalMessage = err.message || String(err);
+      const finalMsgLower = finalMessage.toLowerCase();
       if (isHtmlResponse) {
         finalMessage = 'الخادم أرجع صفحة ويب بدلاً من بيانات JSON. هذا يحدث غالباً عند استضافة التطبيق كموقع ساكن (Static Site) على Vercel دون تفعيل الـ API بالكامل. يرجى تفعيل الدوال السحابية (Serverless Functions) وتحميل مجلد /api، والتأكد من تواجد مفتاح الـ API.';
+      } else if (finalMsgLower.includes('high demand') || finalMsgLower.includes('503') || finalMsgLower.includes('unavailable')) {
+        finalMessage = "خوادم الذكاء الاصطناعي (Google Gemini) تشهد ضغطاً مؤقتاً في هذه اللحظة (High Demand). تم تزويد التطبيق بنماذج خفيفة وبديلة تلقائياً. يُرجى النقر على زر 'إعادة المحاولة الآن' للمحاولة عبر نموذج فوري.";
       }
       setAiGeneratorError(finalMessage);
     } finally {
@@ -1972,9 +1984,20 @@ export default function TeacherDashboard({ session, onLogout, firebaseStatus }: 
 
                 <form onSubmit={handleGenerateAiQuestion} className="space-y-4">
                   {aiGeneratorError && (
-                    <div className="bg-red-50 text-red-800 border-r-4 border-red-500 px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                      <span>{aiGeneratorError}</span>
+                    <div className="bg-red-50 text-red-800 border-r-4 border-red-500 p-3.5 rounded-xl text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                      <div className="flex items-start gap-2.5">
+                        <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                        <span className="leading-relaxed">{aiGeneratorError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateAiQuestion()}
+                        disabled={isAiGenerating}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-xs transition active:scale-95 shrink-0 cursor-pointer self-end sm:self-center"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${isAiGenerating ? 'animate-spin' : ''}`} />
+                        <span>إعادة المحاولة الآن</span>
+                      </button>
                     </div>
                   )}
                   {aiGeneratorSuccess && (
